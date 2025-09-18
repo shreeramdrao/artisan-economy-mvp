@@ -19,7 +19,6 @@ import {
   ApiOperation,
   ApiResponse,
   ApiConsumes,
-  ApiBody,
 } from '@nestjs/swagger';
 import { SellerService } from './seller.service';
 import { UploadProductDto } from './dto/upload-product.dto';
@@ -84,17 +83,25 @@ export class SellerController {
 
   // ------------------ PRODUCT UPDATE ------------------
   @Patch('product/:id')
-  @UseInterceptors(FileFieldsInterceptor([{ name: 'image', maxCount: 1 }]))
-  @ApiOperation({ summary: 'Update an existing product' })
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'image', maxCount: 1 },
+      { name: 'audioStory', maxCount: 1 },
+    ]),
+  )
+  @ApiOperation({ summary: 'Update an existing product (image/audio optional)' })
   @ApiConsumes('multipart/form-data')
   @ApiResponse({ status: 200, description: 'Product updated successfully' })
   async updateProduct(
     @Param('id') productId: string,
-    @UploadedFiles() files: { image?: Express.Multer.File[] },
+    @UploadedFiles()
+    files: { image?: Express.Multer.File[]; audioStory?: Express.Multer.File[] },
     @Body() updateProductDto: UpdateProductDto,
     @Req() req: Request,
   ) {
     const image = files?.image?.[0];
+    const audioStory = files?.audioStory?.[0];
+
     const authUser = this.getAuthUser(req);
     if (!authUser?.userId) throw new BadRequestException('Not authenticated');
 
@@ -102,6 +109,7 @@ export class SellerController {
       productId,
       { ...updateProductDto, sellerId: authUser.userId },
       image,
+      audioStory,
     );
   }
 

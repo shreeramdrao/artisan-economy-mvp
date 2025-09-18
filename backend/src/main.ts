@@ -10,16 +10,16 @@ import cookieParser from 'cookie-parser';   // ✅ import
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // ✅ Stripe webhook raw body parser
+  // ✅ Stripe webhook raw body parser (must come before global JSON body parser)
   app.use(
     '/api/buyer/stripe-webhook',
     bodyParser.raw({ type: 'application/json' }),
   );
 
-  // ✅ Cookie parser middleware
+  // ✅ Cookie parser middleware (so we can read cookies in controllers)
   app.use(cookieParser());
 
-  // Global prefix
+  // ✅ Global prefix for all APIs
   app.setGlobalPrefix('api');
 
   // ✅ CORS config
@@ -28,25 +28,25 @@ async function bootstrap() {
     credentials: true, // allow cookies
   });
 
-  // Global pipes
+  // ✅ Global pipes (removed forbidNonWhitelisted so file fields won't trigger errors)
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       transform: true,
-      forbidNonWhitelisted: true,
+      // ❌ removed forbidNonWhitelisted
       transformOptions: {
         enableImplicitConversion: true,
       },
     }),
   );
 
-  // Global filters
+  // ✅ Global filters
   app.useGlobalFilters(new HttpExceptionFilter());
 
-  // Global interceptors
+  // ✅ Global interceptors
   app.useGlobalInterceptors(new LoggingInterceptor());
 
-  // Swagger documentation
+  // ✅ Swagger documentation
   const config = new DocumentBuilder()
     .setTitle('Artisan Economy API')
     .setDescription('AI-powered marketplace for Indian artisans')
@@ -59,6 +59,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
+  // ✅ Start server
   const port = process.env.PORT || 4000;
   await app.listen(port);
   console.log(`🚀 Application is running on: http://localhost:${port}/api`);

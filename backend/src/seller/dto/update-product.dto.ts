@@ -8,23 +8,24 @@ import {
 } from 'class-validator';
 
 export class UpdateProductDto {
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Updated product title' })
   @IsString()
   @IsOptional()
   title?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Updated text story about the product' })
   @IsString()
   @IsOptional()
   story?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Updated product price', example: 2500 })
   @IsNumber()
   @Min(0)
   @IsOptional()
   price?: number;
 
   @ApiPropertyOptional({
+    description: 'Updated product category',
     enum: [
       'Pottery',
       'Textiles',
@@ -39,6 +40,7 @@ export class UpdateProductDto {
       'Traditional Wear',
       'Accessories',
     ],
+    example: 'Pottery',
   })
   @IsEnum([
     'Pottery',
@@ -57,12 +59,15 @@ export class UpdateProductDto {
   @IsOptional()
   category?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Product status (published, draft, archived)',
+    example: 'published',
+  })
   @IsString()
   @IsOptional()
-  status?: string; // published, draft, archived
+  status?: string;
 
-  // ✅ Added sellerId so it's recognized during updates
+  // ✅ Added sellerId so backend knows who owns the product
   @ApiPropertyOptional({
     description: 'ID of the seller who owns the product',
     example: 'seller123',
@@ -70,4 +75,20 @@ export class UpdateProductDto {
   @IsString()
   @IsOptional()
   sellerId?: string;
+
+  // ✅ Product image (handled via Multer, not validated here)
+  @ApiPropertyOptional({
+    type: 'string',
+    format: 'binary',
+    description: 'Optional updated product image',
+  })
+  image?: any;
+
+  // ✅ Optional audio story update
+  @ApiPropertyOptional({
+    type: 'string',
+    format: 'binary',
+    description: 'Optional updated audio story',
+  })
+  audioStory?: any;
 }

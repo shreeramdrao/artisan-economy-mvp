@@ -31,7 +31,6 @@ export class UploadProductDto {
   @IsString()
   title: string;
 
-  // ✅ Text story (optional)
   @ApiPropertyOptional({
     description: 'Optional text story about the product',
     example: 'This pot is handcrafted using traditional clay techniques...',
@@ -40,22 +39,21 @@ export class UploadProductDto {
   @IsOptional()
   story?: string;
 
-  // ✅ Product image (required)
+  // ✅ Swagger-only: Multer handles these files, not validated by class-validator
   @ApiProperty({
     type: 'string',
     format: 'binary',
     description: 'Product image (required)',
   })
-  image: Express.Multer.File;
+  image?: any;
 
-  // ✅ Optional audio story
   @ApiPropertyOptional({
     type: 'string',
     format: 'binary',
     description:
       'Optional audio recording of the product story (any language). Will be transcribed automatically.',
   })
-  audioStory?: Express.Multer.File;
+  audioStory?: any;
 
   @ApiProperty({
     example: 2500,
