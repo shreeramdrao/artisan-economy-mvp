@@ -99,3 +99,8 @@ bower_components/
 *.bak
 *.swp
 .idea/
+# Env files
+backend/.env
+frontend/.env.local
+.env
+

@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+      - GC_PROJECT_ID=artisan-ai-hackathon
+      - FIRESTORE_DATABASE_ID=(default)
+      - GCS_BUCKET_NAME=artisan-economy-storage
+      - VERTEX_AI_LOCATION=us-central1
+      - VERTEX_AI_MODEL=gemini-pro
+      - FRONTEND_URL=http://localhost:3000
+    volumes:
+      - ./service-account.json:/app/service-account.json:ro
+      - ./src:/app/src
+      - ./dist:/app/dist
+    env_file:
+      - .env
+    command: npm run start:dev
