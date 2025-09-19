@@ -56,10 +56,14 @@ export class AuthService {
 
     this.logger.log(`${dto.role} registered successfully: ${dto.email}`);
 
+    // ✅ Return consistent structure like login()
     return {
       status: 'success',
       message: `${dto.role} registered successfully`,
-      userId: dto.email,
+      userId: userData.id,
+      name: userData.name,
+      email: userData.email,
+      role: userData.role,
     };
   }
 
@@ -78,7 +82,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // ✅ For MVP: just return user info (later JWT session tokens can be added)
+    // ✅ Return same consistent structure
     this.logger.log(`${dto.role} logged in successfully: ${dto.email}`);
 
     return {

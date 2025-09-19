@@ -26,11 +26,34 @@ export class AuthController {
     status: 201,
     description: 'User registered successfully',
   })
-  async register(@Body() registerDto: RegisterDto) {
+  async register(
+    @Body() registerDto: RegisterDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     if (!registerDto.role || !['buyer', 'seller'].includes(registerDto.role)) {
       throw new BadRequestException('Role must be either buyer or seller');
     }
-    return this.authService.register(registerDto);
+
+    const user = await this.authService.register(registerDto);
+
+    // ✅ Save authUser into cookie
+    res.cookie(
+      'authUser',
+      JSON.stringify({
+        userId: user.userId,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      }),
+      {
+        httpOnly: false, // allow frontend JS to read
+        secure: false,   // set true if HTTPS in prod
+        sameSite: 'lax',
+        path: '/',       // ensure cookie is available globally
+      },
+    );
+
+    return user;
   }
 
   // ------------------ LOGIN ------------------
@@ -57,9 +80,10 @@ export class AuthController {
         role: user.role,
       }),
       {
-        httpOnly: false, // allow frontend JS to read
-        secure: false,   // set true if using HTTPS in prod
+        httpOnly: false,
+        secure: false,
         sameSite: 'lax',
+        path: '/', // cookie works across /seller and /buyer
       },
     );
 
