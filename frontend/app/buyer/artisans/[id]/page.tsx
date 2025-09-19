@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { buyerApi, sellerApi } from '@/lib/api'
+import { buyerApi } from '@/lib/api'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { formatPrice } from '@/lib/utils'
 
 export default function ArtisanProductsPage() {
-  const { id } = useParams() // artisan ID from URL
+  const { id: rawId } = useParams() // artisan ID from URL
+  const id = decodeURIComponent(rawId as string) // ✅ decode email-based IDs
+
   const [artisan, setArtisan] = useState<any>(null)
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -26,7 +28,7 @@ export default function ArtisanProductsPage() {
 
         // ✅ Get artisan’s products
         if (id) {
-          const productsData = await sellerApi.getProducts(id as string)
+          const productsData = await buyerApi.getArtisanProducts(id)
           setProducts(productsData || [])
         }
       } catch (err) {

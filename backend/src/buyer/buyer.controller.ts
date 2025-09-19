@@ -19,7 +19,7 @@ import {
   ProductListResponse,
   ProductDetailResponse,
   CheckoutResponse,
-  OrderResponse,   // ✅ Import new OrderResponse DTO
+  OrderResponse,
 } from './dto/buyer-response.dto';
 import { Request, Response } from 'express';
 
@@ -112,7 +112,7 @@ export class BuyerController {
   @ApiResponse({
     status: 200,
     description: 'List of orders',
-    type: [OrderResponse],   // ✅ Use new DTO instead of inline schema
+    type: [OrderResponse],
   })
   async getOrders(@Param('buyerId') buyerId: string): Promise<OrderResponse[]> {
     return this.buyerService.getOrders(buyerId);
@@ -136,6 +136,20 @@ export class BuyerController {
   @ApiOperation({ summary: 'Get all artisans (sellers)' })
   async getArtisans() {
     return this.buyerService.getArtisans();
+  }
+
+  // ✅ NEW: Get all products of a specific artisan
+  @Get('artisan/:sellerId/products')
+  @ApiOperation({ summary: 'Get all products by a specific artisan (seller)' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of artisan products',
+    type: [ProductListResponse],
+  })
+  async getArtisanProducts(
+    @Param('sellerId') sellerId: string,
+  ): Promise<ProductListResponse[]> {
+    return this.buyerService.getProductsByArtisan(sellerId);
   }
 
   // ----------------- CART -----------------

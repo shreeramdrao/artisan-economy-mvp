@@ -9,7 +9,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true, // ✅ send cookies (authUser) with requests
+  withCredentials: true, // ✅ send cookies with requests
 })
 
 /* ----------------- Auth APIs ----------------- */
@@ -44,7 +44,7 @@ export const sellerApi = {
     return response.data
   },
 
-  // ✅ No sellerId param → backend extracts from cookie/auth
+  // ✅ Seller’s own products (for seller portal)
   getProducts: async () => {
     const response = await api.get('/seller/products')
     return response.data
@@ -80,7 +80,7 @@ export const sellerApi = {
     return response.data
   },
 
-  // ✅ Payments also don’t need sellerId param
+  // ✅ Payments (seller side)
   getPayments: async (): Promise<SellerPaymentResponse[]> => {
     const response = await api.get('/seller/payments')
     return response.data
@@ -172,6 +172,12 @@ export const buyerApi = {
 
   getArtisans: async () => {
     const response = await api.get('/buyer/artisans')
+    return response.data
+  },
+
+  // ✅ NEW: Get products for a specific artisan
+  getArtisanProducts: async (artisanId: string) => {
+    const response = await api.get(`/buyer/artisan/${artisanId}/products`)
     return response.data
   },
 }

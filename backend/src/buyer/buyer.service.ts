@@ -51,7 +51,7 @@ export class BuyerService {
       productId: product.id,
       title: product.title,
       price: product.price.amount,
-      imageUrl: product.images?.polished || product.images?.enhanced,
+      imageUrl: product.images?.polished || product.images?.enhanced || product.images?.original,
       sellerName: product.sellerName,
       category: product.category,
       tags: product.tags,
@@ -101,13 +101,38 @@ export class BuyerService {
     };
   }
 
+  // ✅ Products by specific artisan
+  async getProductsByArtisan(sellerId: string): Promise<ProductListResponse[]> {
+    const products = await this.firestoreService.queryDocuments('products', {
+      field: 'sellerId',
+      operator: '==',
+      value: sellerId,
+    });
+
+    if (!products || products.length === 0) {
+      return [];
+    }
+
+    return products.map((product) => ({
+      productId: product.id,
+      title: product.title,
+      price: product.price.amount,
+      imageUrl: product.images?.polished || product.images?.enhanced || product.images?.original,
+      sellerName: product.sellerName,
+      category: product.category,
+      tags: product.tags,
+      rating: product.rating || 0,
+      location: 'India',
+      status: product.status || 'draft',
+    }));
+  }
+
   // ----------------- CHECKOUT -----------------
   async checkout(dto: CheckoutDto): Promise<CheckoutResponse> {
     try {
       const orderId = uuidv4();
       this.logger.log(`Processing checkout for order: ${orderId}`);
 
-      // ✅ Support multiple products (cart) or single product (buy now)
       const items = dto.items && dto.items.length > 0
         ? dto.items
         : [{ productId: dto.productId, quantity: dto.quantity }];
@@ -123,17 +148,15 @@ export class BuyerService {
         const itemTotal = product.price.amount * item.quantity;
         totalAmount += itemTotal;
 
-        // Stripe line item
         lineItems.push({
           price_data: {
             currency: 'inr',
             product_data: { name: product.title },
-            unit_amount: product.price.amount * 100, // in paise
+            unit_amount: product.price.amount * 100,
           },
           quantity: item.quantity,
         });
 
-        // Order product
         orderProducts.push({
           productId: item.productId,
           sellerId: product.sellerId,
@@ -148,7 +171,6 @@ export class BuyerService {
       let paymentStatus = 'pending';
       let stripeSessionId: string | null = null;
 
-      // 🔹 STRIPE PAYMENT
       if (dto.paymentMethod === PaymentMethod.STRIPE) {
         const session = await this.stripe.checkout.sessions.create({
           payment_method_types: ['card'],
@@ -162,19 +184,15 @@ export class BuyerService {
 
         paymentUrl = session.url!;
         stripeSessionId = session.id;
-      }
-
-      // 🔹 COD PAYMENT
-      else if (dto.paymentMethod === PaymentMethod.COD) {
+      } else if (dto.paymentMethod === PaymentMethod.COD) {
         status = 'confirmed';
         paymentStatus = 'cod_pending';
       }
 
-      // 🔹 Save Order
       const orderData: any = {
         id: orderId,
         buyerId: dto.buyerId || 'guest',
-        products: orderProducts, // ✅ multiple products
+        products: orderProducts,
         totalAmount,
         paymentMethod: dto.paymentMethod,
         paymentStatus,
@@ -257,14 +275,13 @@ export class BuyerService {
       value: buyerId,
     });
 
-    // ✅ sort latest first
     orders.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
 
     return orders.map((o) => ({
       orderId: o.id,
-      products: o.products || [], // ✅ array of products
+      products: o.products || [],
       totalAmount: o.totalAmount,
       status: o.status,
       paymentMethod: o.paymentMethod,
@@ -306,7 +323,7 @@ export class BuyerService {
         productId: product.id,
         title: product.title,
         price: product.price.amount,
-        imageUrl: product.images?.polished || product.images?.enhanced,
+        imageUrl: product.images?.polished || product.images?.enhanced || product.images?.original,
         sellerName: product.sellerName,
         category: product.category,
       }));
@@ -318,11 +335,12 @@ export class BuyerService {
     return artisans.map((a) => ({
       id: a.id,
       name: a.name,
-      location: a.location,
-      bio: a.bio,
+      location: a.location || 'India',
+      bio: a.bio || 'Traditional artisan',
       rating: a.rating || 0,
       totalSales: a.totalSales || 0,
       isVerified: a.isVerified || false,
+      imageUrl: a.imageUrl || '/placeholder.png', // ✅ ensure image field
     }));
   }
 
