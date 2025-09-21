@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { authApi } from '@/lib/api'
 import { Card } from '@/components/ui/card'
@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { useAuth } from '@/context/auth-context'
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<'seller' | 'buyer'>('buyer')
@@ -44,9 +44,7 @@ export default function LoginPage() {
         description: `Welcome back, ${res.name}!`,
       })
 
-      // ✅ Redirect priority:
-      // 1. If redirect param exists → go there
-      // 2. Else → go to role-based dashboard
+      // ✅ Redirect priority
       if (redirectParam) {
         router.replace(redirectParam)
       } else {
@@ -133,5 +131,14 @@ export default function LoginPage() {
         </p>
       </Card>
     </div>
+  )
+}
+
+// ✅ Wrap in Suspense to fix Next.js build error
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="text-center mt-20">Loading login...</div>}>
+      <LoginForm />
+    </Suspense>
   )
 }

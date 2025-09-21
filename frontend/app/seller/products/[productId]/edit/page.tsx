@@ -19,7 +19,7 @@ export default function EditProductPage() {
   useEffect(() => {
     async function fetchProduct() {
       try {
-        const data = await sellerApi.getProducts('seller123') // 🔑 TODO: replace with real seller auth
+        const data = await sellerApi.getProducts() // 🔑 TODO: replace with real seller auth
         const found = data.find((p: any) => p.productId === productId)
         setProduct(found)
       } catch (err) {

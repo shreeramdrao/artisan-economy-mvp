@@ -47,8 +47,8 @@ export class AuthController {
       }),
       {
         httpOnly: false, // allow frontend JS to read
-        secure: false,   // set true if HTTPS in prod
-        sameSite: 'lax',
+        secure: true,   // set true if HTTPS in prod
+        sameSite: 'none',
         path: '/',       // ensure cookie is available globally
       },
     );
@@ -81,8 +81,8 @@ export class AuthController {
       }),
       {
         httpOnly: false,
-        secure: false,
-        sameSite: 'lax',
+        secure: true,
+        sameSite: 'none',
         path: '/', // cookie works across /seller and /buyer
       },
     );

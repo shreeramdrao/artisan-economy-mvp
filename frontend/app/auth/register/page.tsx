@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { authApi } from '@/lib/api'
 import { Card } from '@/components/ui/card'
@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { useAuth } from '@/context/auth-context'
 
-export default function RegisterPage() {
+function RegisterForm() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -164,5 +164,14 @@ export default function RegisterPage() {
         </p>
       </Card>
     </div>
+  )
+}
+
+// ✅ Wrap in Suspense to avoid Next.js prerender error
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="text-center mt-20">Loading registration...</div>}>
+      <RegisterForm />
+    </Suspense>
   )
 }

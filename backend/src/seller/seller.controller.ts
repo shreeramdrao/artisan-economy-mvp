@@ -35,10 +35,24 @@ import { SellerPaymentResponse } from './dto/seller-payment-response.dto';
 export class SellerController {
   constructor(private readonly sellerService: SellerService) {}
 
+  /** ✅ Helper: Extract auth user from cookie OR Authorization header */
   private getAuthUser(req: Request) {
     try {
-      return req.cookies?.authUser ? JSON.parse(req.cookies.authUser) : null;
-    } catch {
+      // 1. Cookie method
+      if (req.cookies?.authUser) {
+        return JSON.parse(req.cookies.authUser);
+      }
+
+      // 2. Authorization header fallback (Bearer <base64User>)
+      const authHeader = req.headers['authorization'];
+      if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1];
+        return JSON.parse(Buffer.from(token, 'base64').toString());
+      }
+
+      return null;
+    } catch (err) {
+      console.error('❌ Failed to parse auth user:', err);
       return null;
     }
   }

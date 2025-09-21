@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { Suspense, useState, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,7 @@ import { buyerApi } from '@/lib/api'
 import { useCart } from '@/context/cart-context'
 import { formatPrice } from '@/lib/utils'
 
-export default function CheckoutPage() {
+function CheckoutForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
@@ -48,10 +48,9 @@ export default function CheckoutPage() {
     }))
   }, [productId, quantity, cart])
 
-  // ✅ Calculate total amount based on checkout items
+  // ✅ Calculate total amount
   const total = useMemo(() => {
     if (productId) {
-      // Buy Now mode → try to fetch from cart OR fallback to 0
       const productInCart = cart.find((c) => c.productId === productId)
       return quantity * (productInCart?.price || 0)
     }
@@ -74,7 +73,7 @@ export default function CheckoutPage() {
       setLoading(true)
 
       const checkoutData = {
-        buyerId: 'buyer123', // TODO: Replace with actual logged-in user
+        buyerId: 'buyer123', // TODO: replace with real logged-in user
         items: checkoutItems,
         paymentMethod: form.paymentMethod,
         shippingAddress: {
@@ -185,5 +184,14 @@ export default function CheckoutPage() {
         </form>
       </Card>
     </div>
+  )
+}
+
+// ✅ Wrap in Suspense to avoid Next.js prerender error
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={<div className="text-center mt-20">Loading checkout...</div>}>
+      <CheckoutForm />
+    </Suspense>
   )
 }

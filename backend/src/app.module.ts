@@ -17,6 +17,8 @@ import { validationSchema } from './config/validation';
       load: [configuration],
       validationSchema,
       cache: true,
+      // ✅ Important: allow pulling envs from Cloud Run
+      expandVariables: true,
     }),
     CommonModule,
     SellerModule,
