@@ -24,7 +24,7 @@
     "@google-cloud/speech": "^6.0.0",
     "@google-cloud/storage": "^7.7.0",
     "@google-cloud/text-to-speech": "^5.0.0",
-    "@google-cloud/vertexai": "^0.2.0",
+    "@google-cloud/vertexai": "^1.10.0",
     "@google-cloud/vision": "^4.0.0",
     "@nestjs/axios": "^3.0.1",
     "@nestjs/common": "^10.0.0",

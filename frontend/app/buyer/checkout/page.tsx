@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState, useMemo } from 'react'
+import { Suspense, useEffect, useState, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { buyerApi } from '@/lib/api'
 import { useCart } from '@/context/cart-context'
+import { useAuth } from '@/context/auth-context'
 import { formatPrice } from '@/lib/utils'
 
 function CheckoutForm() {
@@ -16,8 +17,9 @@ function CheckoutForm() {
   const searchParams = useSearchParams()
   const { toast } = useToast()
   const { cart, clearCart } = useCart()
+  const { user } = useAuth()
 
-  // ✅ Detect single product (Buy Now) or Cart Checkout
+  // Buy Now params
   const productId = searchParams.get('productId')
   const quantity = Number(searchParams.get('quantity') || 1)
 
@@ -32,12 +34,35 @@ function CheckoutForm() {
   })
 
   const [loading, setLoading] = useState(false)
+  const [product, setProduct] = useState<any | null>(null)
+  const [productLoading, setProductLoading] = useState(false)
+
+  useEffect(() => {
+    async function loadProduct() {
+      if (!productId) return
+      setProductLoading(true)
+      try {
+        const p = await buyerApi.getProduct(productId)
+        setProduct(p)
+      } catch (err) {
+        console.error('Failed to load product for Buy Now:', err)
+        toast({
+          title: 'Error',
+          description: 'Failed to load product details for checkout.',
+          variant: 'destructive',
+        })
+      } finally {
+        setProductLoading(false)
+      }
+    }
+    loadProduct()
+  }, [productId])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
 
-  // ✅ Build checkout items (Buy Now or Cart)
+  // Build checkout items (Buy Now or Cart)
   const checkoutItems = useMemo(() => {
     if (productId) {
       return [{ productId, quantity }]
@@ -48,14 +73,15 @@ function CheckoutForm() {
     }))
   }, [productId, quantity, cart])
 
-  // ✅ Calculate total amount
+  // Calculate total amount
   const total = useMemo(() => {
     if (productId) {
-      const productInCart = cart.find((c) => c.productId === productId)
-      return quantity * (productInCart?.price || 0)
+      // if product fetched, use its price; fallback to 0
+      const price = product?.price || product?.price?.amount || 0
+      return quantity * price
     }
     return cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  }, [productId, quantity, cart])
+  }, [productId, quantity, product, cart])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -72,8 +98,11 @@ function CheckoutForm() {
     try {
       setLoading(true)
 
+      // Use real logged-in buyerId (fallback to 'guest' only if missing)
+      const buyerId = user?.userId || 'guest'
+
       const checkoutData = {
-        buyerId: 'buyer123', // TODO: replace with real logged-in user
+        buyerId,
         items: checkoutItems,
         paymentMethod: form.paymentMethod,
         shippingAddress: {
@@ -89,6 +118,7 @@ function CheckoutForm() {
       const res = await buyerApi.checkout(checkoutData)
 
       if (res.paymentUrl && form.paymentMethod === 'stripe') {
+        // redirect to stripe
         window.location.href = res.paymentUrl
       } else if (form.paymentMethod === 'cod') {
         toast({
@@ -116,6 +146,11 @@ function CheckoutForm() {
     }
   }
 
+  // UI state while loading product for Buy Now
+  if (productId && productLoading) {
+    return <div className="text-center mt-10">⏳ Loading product details...</div>
+  }
+
   return (
     <div className="container mx-auto px-4 py-10">
       <h1 className="text-3xl font-bold mb-6">Checkout</h1>
@@ -125,11 +160,21 @@ function CheckoutForm() {
           <div className="grid gap-4">
             <div>
               <Label>Name</Label>
-              <Input name="name" value={form.name} onChange={handleChange} required />
+              <Input
+                name="name"
+                value={form.name}
+                onChange={handleChange}
+                required
+              />
             </div>
             <div>
               <Label>Address</Label>
-              <Input name="address" value={form.address} onChange={handleChange} required />
+              <Input
+                name="address"
+                value={form.address}
+                onChange={handleChange}
+                required
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -187,7 +232,7 @@ function CheckoutForm() {
   )
 }
 
-// ✅ Wrap in Suspense to avoid Next.js prerender error
+// Wrap in Suspense like before
 export default function CheckoutPage() {
   return (
     <Suspense fallback={<div className="text-center mt-20">Loading checkout...</div>}>

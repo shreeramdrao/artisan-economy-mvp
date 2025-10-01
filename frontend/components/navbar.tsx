@@ -82,6 +82,14 @@ export default function Navbar() {
               >
                 Artisans
               </Button>
+
+              <Button
+                variant="ghost"
+                onClick={() => router.push('/buyer/orders')}
+              >
+                My Orders
+              </Button>
+
               <Button
                 variant="ghost"
                 onClick={() => router.push('/buyer/liked')}
@@ -118,6 +126,15 @@ export default function Navbar() {
               >
                 My Products
               </Button>
+
+              {/* Quick access for seller payments */}
+              <Button
+                variant="ghost"
+                onClick={() => router.push('/seller/payments')}
+              >
+                💰 Payments
+              </Button>
+
               <Button
                 variant="outline"
                 onClick={() => router.push('/seller/profile')}

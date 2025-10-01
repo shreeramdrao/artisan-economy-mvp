@@ -197,6 +197,18 @@ export const aiApi = {
     const response = await api.post('/ai/text-to-speech', { text, language })
     return response.data
   },
+
+  // ✅ NEW: Instagram caption generator
+  generateInstagramCaption: async (payload: {
+    productTitle: string
+    description: string
+    tags?: string[]
+  }) => {
+    const response = await api.post('/ai/generate-instagram-caption', payload, {
+      headers: { 'Content-Type': 'application/json' },
+    })
+    return response.data
+  },
 }
 
 export default api

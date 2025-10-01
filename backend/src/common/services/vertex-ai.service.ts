@@ -12,10 +12,10 @@ export class VertexAiService {
   constructor(private configService: ConfigService) {
     try {
       const projectId = this.configService.get('googleCloud.projectId');
-      const location = this.configService.get('ai.vertexLocation');
-      const modelName = this.configService.get('ai.vertexModel');
+      const location = this.configService.get('ai.vertexLocation') || 'us-central1';
+      const modelName = this.configService.get('ai.vertexModel') || 'gemini-2.0-flash'; // ✅ default safe model
 
-      if (!projectId || !location || !modelName) {
+      if (!projectId || !location) {
         this.logger.warn('Vertex AI not initialized: Missing configuration');
         return;
       }
@@ -25,18 +25,19 @@ export class VertexAiService {
         location: location,
       });
 
-      this.model = this.vertexAI.preview.getGenerativeModel({
+      // ✅ FIX: use generativeModels instead of preview
+      this.model = this.vertexAI.getGenerativeModel({
         model: modelName,
-        generation_config: {
-          max_output_tokens: 2048,
+        generationConfig: {
+          maxOutputTokens: 1024,
           temperature: 0.7,
-          top_p: 0.8,
-          top_k: 40,
+          topP: 0.8,
+          topK: 40,
         },
       });
 
       this.initialized = true;
-      this.logger.log(`Vertex AI initialized with model: ${modelName}`);
+      this.logger.log(`Vertex AI initialized with model: ${modelName} in ${location}`);
     } catch (error) {
       this.logger.error('Failed to initialize Vertex AI:', error);
     }
@@ -72,14 +73,10 @@ Provide the response in this exact JSON format:
   }
 }`;
 
-      const result = await this.model.generateContent(prompt);
+      const result = await this.model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
 
-      let text = '';
-      if (result.response?.candidates?.[0]?.content?.parts?.[0]) {
-        text = result.response.candidates[0].content.parts[0].text || '';
-      }
-
-      this.logger.log('Vertex AI response received');
+      let text = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      this.logger.log('Vertex AI response received for polishStory');
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -88,7 +85,7 @@ Provide the response in this exact JSON format:
           return {
             polishedStory: parsed.polishedStory || rawStory,
             translations: {
-              en: parsed.translations?.en || parsed.polishedStory || rawStory,
+              en: parsed.translations?.en || rawStory,
               hi: parsed.translations?.hi || rawStory,
               kn: parsed.translations?.kn || rawStory,
             },
@@ -98,36 +95,15 @@ Provide the response in this exact JSON format:
         }
       }
 
-      // fallback
-      return {
-        polishedStory: rawStory,
-        translations: {
-          en: rawStory,
-          hi: rawStory,
-          kn: rawStory,
-        },
-      };
+      return { polishedStory: rawStory, translations: { en: rawStory, hi: rawStory, kn: rawStory } };
     } catch (error) {
       this.logger.error('Error polishing story with Vertex AI:', error);
-      return {
-        polishedStory: rawStory,
-        translations: {
-          en: rawStory,
-          hi: rawStory,
-          kn: rawStory,
-        },
-      };
+      return { polishedStory: rawStory, translations: { en: rawStory, hi: rawStory, kn: rawStory } };
     }
   }
 
   // ---------------- PRICE SUGGESTION ----------------
-  async suggestPrice(data: {
-    category: string;
-    description: string;
-    materialCost?: number; // ✅ made optional
-    hours?: number;        // ✅ made optional
-    rarity?: number;
-  }) {
+  async suggestPrice(data: { category: string; description: string; materialCost?: number; hours?: number; rarity?: number }) {
     try {
       this.checkInitialized();
 
@@ -144,27 +120,24 @@ Product Details:
 - Rarity Level: ${data.rarity || 5}/10
 
 Suggest 3 price points in INR considering:
-1. Material cost and labor (minimum ₹500/hour for skilled artisan work)
+1. Material cost and labor (minimum ₹500/hour)
 2. Market rates for similar ${data.category} products
 3. Uniqueness and cultural value
 4. Fair compensation for the artisan
 
-Provide response in this exact JSON format:
+Provide response in JSON:
 {
   "conservative": <number>,
   "recommended": <number>,
   "premium": <number>,
-  "reasoning": "Brief explanation for the pricing"
+  "reasoning": "..."
 }`;
 
-      const result = await this.model.generateContent(prompt);
+      const result = await this.model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
 
-      let text = '';
-      if (result.response?.candidates?.[0]?.content?.parts?.[0]) {
-        text = result.response.candidates[0].content.parts[0].text || '';
-      }
-
+      let text = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
       const jsonMatch = text.match(/\{[\s\S]*\}/);
+
       if (jsonMatch) {
         try {
           const parsed = JSON.parse(jsonMatch[0]);
@@ -174,12 +147,12 @@ Provide response in this exact JSON format:
             premium: Math.round(parsed.premium || materialCost * 4),
             reasoning: parsed.reasoning || 'Based on material cost and labor hours',
           };
-        } catch (parseError) {
-          this.logger.error('Error parsing price suggestion:', parseError);
+        } catch (err) {
+          this.logger.error('Error parsing price JSON:', err);
         }
       }
 
-      const baseCost = materialCost + (hours * 500);
+      const baseCost = materialCost + hours * 500;
       return {
         conservative: Math.round(baseCost * 1.5),
         recommended: Math.round(baseCost * 2),
@@ -188,12 +161,12 @@ Provide response in this exact JSON format:
       };
     } catch (error) {
       this.logger.error('Error suggesting price with Vertex AI:', error);
-      const baseCost = (data.materialCost ?? 0) + ((data.hours ?? 0) * 500);
+      const baseCost = (data.materialCost ?? 0) + (data.hours ?? 0) * 500;
       return {
         conservative: Math.round(baseCost * 1.5),
         recommended: Math.round(baseCost * 2),
         premium: Math.round(baseCost * 2.5),
-        reasoning: 'Based on material cost and labor hours',
+        reasoning: 'Based on material cost and fallback rates',
       };
     }
   }
@@ -202,12 +175,8 @@ Provide response in this exact JSON format:
   async generateContent(prompt: string): Promise<any> {
     try {
       this.checkInitialized();
-      const result = await this.model.generateContent(prompt);
-
-      if (result.response?.candidates?.[0]?.content?.parts?.[0]) {
-        return result.response.candidates[0].content.parts[0].text || '';
-      }
-      return '';
+      const result = await this.model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
+      return result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     } catch (error) {
       this.logger.error('Error generating content with Vertex AI:', error);
       throw error;
@@ -219,34 +188,31 @@ Provide response in this exact JSON format:
     try {
       this.checkInitialized();
 
-      const prompt = `Create an engaging Instagram caption for this artisan product.
+      const prompt = `Create an engaging Instagram caption.
 
 Product: ${title}
 Story: ${story}
 
 Requirements:
-- Caption: Max 150 characters, authentic and engaging
-- Include 2-3 relevant emojis
-- 10 hashtags mixing popular and niche tags
-
-Format as JSON:
+- Max 150 characters
+- 2-3 emojis
+- 10 hashtags (popular + niche)
+Return JSON:
 {
   "caption": "...",
   "hashtags": ["#tag1", "#tag2", ...]
 }`;
 
-      const result = await this.model.generateContent(prompt);
-
-      let text = '';
-      if (result.response?.candidates?.[0]?.content?.parts?.[0]) {
-        text = result.response.candidates[0].content.parts[0].text || '';
-      }
+      const result = await this.model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
+      let text = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         try {
           return JSON.parse(jsonMatch[0]);
-        } catch (e) {}
+        } catch (err) {
+          this.logger.error('Error parsing caption JSON:', err);
+        }
       }
 
       return {
@@ -266,10 +232,7 @@ Format as JSON:
       };
     } catch (error) {
       this.logger.error('Error generating Instagram caption:', error);
-      return {
-        caption: `Beautiful ${title} - Handcrafted with love 🎨`,
-        hashtags: ['#Handmade', '#ArtisanCrafts', '#MadeInIndia'],
-      };
+      return { caption: `Beautiful ${title} - Handcrafted 🎨`, hashtags: ['#Handmade', '#ArtisanCrafts', '#MadeInIndia'] };
     }
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../common/services/firestore.service';
 import { CheckoutDto, PaymentMethod } from './dto/checkout.dto';
@@ -130,6 +130,14 @@ export class BuyerService {
   // ----------------- CHECKOUT -----------------
   async checkout(dto: CheckoutDto): Promise<CheckoutResponse> {
     try {
+      // make sure buyerId is present and valid
+      if (!dto.buyerId || dto.buyerId === 'guest') {
+        this.logger.warn('Checkout request missing buyerId or using guest. Ensure frontend sends the logged-in userId.');
+        // We still allow "guest" orders, but they will be stored against 'guest'.
+        // If you prefer to *reject* such requests, uncomment below:
+        // throw new BadRequestException('buyerId is required for checkout');
+      }
+
       const orderId = uuidv4();
       this.logger.log(`Processing checkout for order: ${orderId}`);
 
@@ -205,7 +213,7 @@ export class BuyerService {
       if (dto.notes) orderData.notes = dto.notes;
 
       await this.firestoreService.createDocument('orders', orderId, orderData);
-      this.logger.log(`✅ Order created successfully: ${orderId}`);
+      this.logger.log(`✅ Order created successfully: ${orderId} (buyerId=${orderData.buyerId})`);
 
       return {
         orderId,
@@ -269,14 +277,29 @@ export class BuyerService {
 
   // ----------------- ORDERS -----------------
   async getOrders(buyerId: string) {
+    if (!buyerId) {
+      throw new BadRequestException('buyerId is required');
+    }
+
+    // query only orders for this buyer
     let orders = await this.firestoreService.queryDocuments('orders', {
       field: 'buyerId',
       operator: '==',
       value: buyerId,
     });
 
+    // Normalize createdAt values for robust sorting (Date | string | Firestore Timestamp)
+    const normalizeTime = (t: any) => {
+      if (!t) return 0;
+      if (t instanceof Date) return t.getTime();
+      if (typeof t === 'string') return new Date(t).getTime();
+      // Firestore Timestamp (seconds + nanos)
+      if (t.seconds) return t.seconds * 1000;
+      return 0;
+    };
+
     orders.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      (a, b) => normalizeTime(b.createdAt) - normalizeTime(a.createdAt),
     );
 
     return orders.map((o) => ({
@@ -340,7 +363,7 @@ export class BuyerService {
       rating: a.rating || 0,
       totalSales: a.totalSales || 0,
       isVerified: a.isVerified || false,
-      imageUrl: a.imageUrl || '/placeholder.png', // ✅ ensure image field
+      imageUrl: a.imageUrl || '/placeholder.png',
     }));
   }
 

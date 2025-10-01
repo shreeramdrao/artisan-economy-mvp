@@ -105,11 +105,10 @@ export class AiService {
   async generateInstagramCaption(story: string, title: string) {
     try {
       this.logger.log('Generating Instagram caption');
-      const prompt = `Create an Instagram caption (max 150 chars) and 10 hashtags for this artisan product:
-        Title: ${title}
-        Story: ${story}`;
-      
-      const response = await this.vertexAiService.generateContent(prompt);
+      // ✅ FIX: Use vertexAiService.generateInstagramCaption instead of generateContent
+      const response = await this.vertexAiService.generateInstagramCaption(story, title);
+
+      // Ensure structure stays consistent
       return {
         caption: response.caption || `Handcrafted ${title} - A piece of Indian heritage 🪔`,
         hashtags: response.hashtags || [

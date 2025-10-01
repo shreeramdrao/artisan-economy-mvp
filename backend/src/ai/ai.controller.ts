@@ -46,6 +46,10 @@ export class AiController {
   @Post('transcribe')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Transcribe audio to text' })
+  @ApiResponse({
+    status: 200,
+    description: 'Transcribed audio text',
+  })
   async transcribeAudio(@Body() audioData: any) {
     return this.aiService.transcribeAudio(audioData);
   }
@@ -53,6 +57,10 @@ export class AiController {
   @Post('text-to-speech')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Convert text to speech' })
+  @ApiResponse({
+    status: 200,
+    description: 'Generated audio file URL and duration',
+  })
   async textToSpeech(@Body() data: { text: string; language: string }) {
     return this.aiService.textToSpeech(data.text, data.language);
   }
@@ -60,7 +68,14 @@ export class AiController {
   @Post('generate-instagram-caption')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Generate Instagram caption for product' })
-  async generateInstagramCaption(@Body() data: { story: string; title: string }) {
+  @ApiResponse({
+    status: 200,
+    description: 'Caption with hashtags',
+  })
+  async generateInstagramCaption(
+    @Body() data: { story: string; title: string },
+  ) {
+    // ✅ Calls updated AiService which delegates to VertexAiService
     return this.aiService.generateInstagramCaption(data.story, data.title);
   }
 }
