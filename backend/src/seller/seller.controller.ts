@@ -5,6 +5,7 @@ import {
   Patch,
   Param,
   Body,
+  UseGuards,
   UseInterceptors,
   UploadedFiles,
   HttpStatus,
@@ -18,6 +19,7 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
+  ApiBearerAuth,
   ApiConsumes,
 } from '@nestjs/swagger';
 import { SellerService } from './seller.service';
@@ -29,32 +31,41 @@ import {
   SellerOrdersResponse,
 } from './dto/seller-response.dto';
 import { SellerPaymentResponse } from './dto/seller-payment-response.dto';
+import { UpdateSellerProfileDto } from './dto/update-seller-profile.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @ApiTags('seller')
+@ApiBearerAuth() // ✅ Enables Swagger “Authorize” button for JWT
 @Controller('seller')
+@UseGuards(JwtAuthGuard) // ✅ Protects ALL routes by default
 export class SellerController {
   constructor(private readonly sellerService: SellerService) {}
 
-  /** ✅ Helper: Extract auth user from cookie OR Authorization header */
-  private getAuthUser(req: Request) {
-    try {
-      // 1. Cookie method
-      if (req.cookies?.authUser) {
-        return JSON.parse(req.cookies.authUser);
-      }
+  // ------------------ SELLER PROFILE ------------------
+  @Get('profile')
+  @ApiOperation({ summary: 'Get logged-in seller profile' })
+  @ApiResponse({ status: 200, description: 'Seller profile fetched successfully' })
+  async getProfile(@Req() req: Request) {
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+    return this.sellerService.getSellerProfile(user.email);
+  }
 
-      // 2. Authorization header fallback (Bearer <base64User>)
-      const authHeader = req.headers['authorization'];
-      if (authHeader?.startsWith('Bearer ')) {
-        const token = authHeader.split(' ')[1];
-        return JSON.parse(Buffer.from(token, 'base64').toString());
-      }
+  @Patch('profile')
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'avatar', maxCount: 1 }]))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Update logged-in seller profile (with optional avatar)' })
+  @ApiResponse({ status: 200, description: 'Seller profile updated successfully' })
+  async updateProfile(
+    @Req() req: Request,
+    @UploadedFiles() files: { avatar?: Express.Multer.File[] },
+    @Body() updateDto: UpdateSellerProfileDto,
+  ) {
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
 
-      return null;
-    } catch (err) {
-      console.error('❌ Failed to parse auth user:', err);
-      return null;
-    }
+    const avatar = files?.avatar?.[0];
+    return this.sellerService.updateSellerProfile(user.email, updateDto, avatar);
   }
 
   // ------------------ PRODUCT UPLOAD ------------------
@@ -81,15 +92,15 @@ export class SellerController {
       throw new BadRequestException('Product image is required');
     }
 
-    const authUser = this.getAuthUser(req);
-    if (!authUser?.userId) throw new BadRequestException('Not authenticated');
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
 
     return this.sellerService.uploadProduct(
       image,
       {
         ...uploadProductDto,
-        sellerId: authUser.userId,
-        sellerName: authUser.name,
+        sellerId: user.email,
+        sellerName: user.name,
       },
       audioStory,
     );
@@ -116,12 +127,12 @@ export class SellerController {
     const image = files?.image?.[0];
     const audioStory = files?.audioStory?.[0];
 
-    const authUser = this.getAuthUser(req);
-    if (!authUser?.userId) throw new BadRequestException('Not authenticated');
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
 
     return this.sellerService.updateProduct(
       productId,
-      { ...updateProductDto, sellerId: authUser.userId },
+      { ...updateProductDto, sellerId: user.email },
       image,
       audioStory,
     );
@@ -148,9 +159,9 @@ export class SellerController {
   @ApiOperation({ summary: 'Get all products for logged-in seller' })
   @ApiResponse({ status: 200, type: [SellerProductsResponse] })
   async getSellerProducts(@Req() req: Request): Promise<SellerProductsResponse[]> {
-    const authUser = this.getAuthUser(req);
-    if (!authUser?.userId) throw new BadRequestException('Not authenticated');
-    return this.sellerService.getSellerProducts(authUser.userId);
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+    return this.sellerService.getSellerProducts(user.email);
   }
 
   // ------------------ GET SELLER ORDERS ------------------
@@ -158,9 +169,9 @@ export class SellerController {
   @ApiOperation({ summary: 'Get all orders for logged-in seller' })
   @ApiResponse({ status: 200, type: [SellerOrdersResponse] })
   async getSellerOrders(@Req() req: Request): Promise<SellerOrdersResponse[]> {
-    const authUser = this.getAuthUser(req);
-    if (!authUser?.userId) throw new BadRequestException('Not authenticated');
-    return this.sellerService.getSellerOrders(authUser.userId);
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+    return this.sellerService.getSellerOrders(user.email);
   }
 
   // ------------------ GET SELLER PAYMENTS ------------------
@@ -168,17 +179,17 @@ export class SellerController {
   @ApiOperation({ summary: 'Get all completed payments for logged-in seller' })
   @ApiResponse({ status: 200, type: [SellerPaymentResponse] })
   async getSellerPayments(@Req() req: Request): Promise<SellerPaymentResponse[]> {
-    const authUser = this.getAuthUser(req);
-    if (!authUser?.userId) throw new BadRequestException('Not authenticated');
-    return this.sellerService.getSellerPayments(authUser.userId);
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+    return this.sellerService.getSellerPayments(user.email);
   }
 
   // ------------------ DASHBOARD ------------------
   @Get('dashboard')
   @ApiOperation({ summary: 'Get seller dashboard data' })
   async getSellerDashboard(@Req() req: Request) {
-    const authUser = this.getAuthUser(req);
-    if (!authUser?.userId) throw new BadRequestException('Not authenticated');
-    return this.sellerService.getSellerDashboard(authUser.userId);
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+    return this.sellerService.getSellerDashboard(user.email);
   }
 }

@@ -10,6 +10,12 @@ import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { useAuth } from '@/context/auth-context'
 
+// ✅ Helper to set cookies manually (client-side)
+const setCookie = (name: string, value: string, days = 7) => {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString()
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=None; Secure`
+}
+
 function RegisterForm() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -22,8 +28,6 @@ function RegisterForm() {
   const { login } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
-
-  // 🔑 capture redirect param
   const redirectParam = searchParams.get('redirect')
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -39,30 +43,37 @@ function RegisterForm() {
         role,
       })
 
-      // ✅ Auto-login
+      const { token, user } = res
+      if (!token || !user) throw new Error('Invalid response from server')
+
+      // ✅ Store JWT + user cookies
+      setCookie('token', token, 7)
+      setCookie('authUser', JSON.stringify(user), 7)
+
+      // ✅ Update Auth Context
       login({
-        userId: res.userId,
-        name,
-        email,
-        role: res.role, // trust backend role
+        userId: user.userId,
+        name: user.name,
+        email: user.email,
+        role: user.role,
       })
 
       toast({
-        title: '✅ Registration successful',
-        description: `Welcome, ${name}!`,
+        title: '✅ Registration Successful',
+        description: `Welcome, ${user.name}!`,
       })
 
-      // ✅ redirect logic
+      // ✅ Redirect
       if (redirectParam) {
         router.replace(redirectParam)
       } else {
-        router.replace(res.role === 'seller' ? '/seller' : '/buyer')
+        router.replace(user.role === 'seller' ? '/seller' : '/buyer')
       }
     } catch (err: any) {
-      console.error('Registration failed:', err)
+      console.error('❌ Registration failed:', err)
       toast({
-        title: '❌ Registration failed',
-        description: err.response?.data?.message || 'Please try again',
+        title: 'Registration Failed',
+        description: err.response?.data?.message || 'Something went wrong. Please try again.',
         variant: 'destructive',
       })
     } finally {
@@ -167,7 +178,6 @@ function RegisterForm() {
   )
 }
 
-// ✅ Wrap in Suspense to avoid Next.js prerender error
 export default function RegisterPage() {
   return (
     <Suspense fallback={<div className="text-center mt-20">Loading registration...</div>}>

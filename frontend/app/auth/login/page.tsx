@@ -10,6 +10,12 @@ import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { useAuth } from '@/context/auth-context'
 
+// ✅ Helper to set a cookie manually
+const setCookie = (name: string, value: string, days = 7) => {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString()
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=None; Secure`
+}
+
 function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -20,8 +26,6 @@ function LoginForm() {
   const { login } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
-
-  // 🔑 capture redirect query param
   const redirectParam = searchParams.get('redirect')
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -30,31 +34,39 @@ function LoginForm() {
 
     try {
       const res = await authApi.login({ email, password, role })
+      const { token, user } = res
 
-      // ✅ Save to context + localStorage
+      if (!token || !user) throw new Error('Invalid server response')
+
+      // ✅ Save JWT token in client cookie (frontend read)
+      setCookie('token', token, 7)
+      setCookie('authUser', JSON.stringify(user), 7)
+
+      // ✅ Save user to context
       login({
-        userId: res.userId,
-        name: res.name,
-        email: res.email,
-        role: res.role,
+        userId: user.userId,
+        name: user.name,
+        email: user.email,
+        role: user.role,
       })
 
       toast({
         title: '✅ Login successful',
-        description: `Welcome back, ${res.name}!`,
+        description: `Welcome back, ${user.name}!`,
       })
 
       // ✅ Redirect priority
       if (redirectParam) {
         router.replace(redirectParam)
       } else {
-        router.replace(res.role === 'seller' ? '/seller' : '/buyer')
+        router.replace(user.role === 'seller' ? '/seller' : '/buyer')
       }
     } catch (err: any) {
-      console.error('Login failed:', err)
+      console.error('❌ Login failed:', err)
       toast({
-        title: '❌ Login failed',
-        description: err.response?.data?.message || 'Invalid credentials',
+        title: 'Login failed',
+        description:
+          err.response?.data?.message || 'Invalid credentials. Please try again.',
         variant: 'destructive',
       })
     } finally {
@@ -134,7 +146,7 @@ function LoginForm() {
   )
 }
 
-// ✅ Wrap in Suspense to fix Next.js build error
+// ✅ Wrap with Suspense to handle async loading
 export default function LoginPage() {
   return (
     <Suspense fallback={<div className="text-center mt-20">Loading login...</div>}>

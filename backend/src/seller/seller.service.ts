@@ -20,6 +20,8 @@ import {
   SellerProductsResponse,
   SellerOrdersResponse,
 } from './dto/seller-response.dto';
+// 👇 New DTO
+import { UpdateSellerProfileDto } from './dto/update-seller-profile.dto';
 
 @Injectable()
 export class SellerService {
@@ -105,7 +107,6 @@ export class SellerService {
             detectedLang = transcription.language || detectedLang;
           }
 
-          // store raw audio
           const ext = (audioStory.mimetype.split('/')[1] || 'webm').replace(/[^a-z0-9]/gi, '');
           const rawAudioPath = `products/${productId}/original_story.${ext}`;
           await this.storageService.uploadFile(audioStory.buffer, rawAudioPath, audioStory.mimetype, true);
@@ -199,10 +200,8 @@ export class SellerService {
 
       const updates: any = { updatedAt: new Date() };
 
-      // ---------- TITLE ----------
       if (dto.title) updates.title = dto.title;
 
-      // ---------- STORY / AUDIO ----------
       if (dto.story || audioStory?.buffer) {
         let finalStory = dto.story?.trim() || '';
         let detectedLang = 'en';
@@ -215,7 +214,6 @@ export class SellerService {
               detectedLang = transcription.language || detectedLang;
             }
 
-            // save raw audio
             const ext = (audioStory.mimetype.split('/')[1] || 'webm').replace(/[^a-z0-9]/gi, '');
             const rawAudioPath = `products/${productId}/updated_story.${ext}`;
             await this.storageService.uploadFile(audioStory.buffer, rawAudioPath, audioStory.mimetype, true);
@@ -240,14 +238,10 @@ export class SellerService {
         }
       }
 
-      // ---------- PRICE ----------
       if (dto.price !== undefined) updates['price.amount'] = dto.price;
-
-      // ---------- CATEGORY & STATUS ----------
       if (dto.category) updates.category = dto.category;
       if (dto.status) updates.status = dto.status;
 
-      // ---------- IMAGE ----------
       if (image?.buffer) {
         const removedBgBuffer = await this.removeBgService.removeBackground(image.buffer);
         const enhancedImagePath = `products/${productId}/enhanced.jpg`;
@@ -524,5 +518,51 @@ export class SellerService {
     } catch (error) {
       this.logger.error('Error updating seller product list:', error);
     }
+  }
+
+  // ------------------ PROFILE MANAGEMENT ------------------
+  async getSellerProfile(sellerId: string) {
+    if (!sellerId) throw new BadRequestException('sellerId is required');
+    const seller = await this.firestoreService.getDocument('sellers', sellerId);
+    if (!seller) throw new NotFoundException('Seller not found');
+    return seller;
+  }
+
+  async updateSellerProfile(
+    sellerId: string,
+    updateDto: UpdateSellerProfileDto,
+    avatarFile?: Express.Multer.File,
+  ) {
+    if (!sellerId) throw new BadRequestException('sellerId is required');
+    const seller = await this.firestoreService.getDocument('sellers', sellerId);
+    if (!seller) throw new NotFoundException('Seller not found');
+
+    const updates: any = { ...updateDto, updatedAt: new Date() };
+
+    // ✅ Handle avatar upload
+    if (avatarFile?.buffer) {
+      try {
+        const avatarPath = `sellers/${sellerId}/avatar.jpg`;
+        const avatarUrl = await this.storageService.uploadFile(
+          avatarFile.buffer,
+          avatarPath,
+          avatarFile.mimetype,
+        );
+        updates.avatarUrl = avatarUrl;
+      } catch (err) {
+        this.logger.error(`❌ Failed to upload avatar for ${sellerId}:`, err);
+        throw new InternalServerErrorException('Failed to upload avatar');
+      }
+    }
+
+    // ✅ Clean out undefined values
+    Object.keys(updates).forEach((key) => {
+      if (updates[key] === undefined) delete updates[key];
+    });
+
+    await this.firestoreService.updateDocument('sellers', sellerId, updates);
+
+    this.logger.log(`Seller profile updated for ${sellerId}`);
+    return { message: 'Profile updated successfully', sellerId, updates };
   }
 }

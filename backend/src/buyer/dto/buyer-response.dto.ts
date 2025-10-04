@@ -98,6 +98,7 @@ export class ProductDetailResponse {
       location: 'Bangalore',
       rating: 4.5,
       bio: 'Experienced artisan in pottery',
+      avatarUrl: '/images/default-avatar.png',
     },
   })
   sellerInfo: {
@@ -106,6 +107,7 @@ export class ProductDetailResponse {
     location: string;
     rating: number;
     bio: string;
+    avatarUrl?: string;
   };
 
   @ApiProperty({

@@ -21,72 +21,117 @@ export class AuthController {
   // ------------------ REGISTER ------------------
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Register as Buyer or Seller' })
-  @ApiResponse({
-    status: 201,
-    description: 'User registered successfully',
-  })
+  @ApiOperation({ summary: 'Register as Buyer or Seller (returns JWT token + cookies)' })
+  @ApiResponse({ status: 201, description: 'User registered successfully' })
   async register(
     @Body() registerDto: RegisterDto,
     @Res({ passthrough: true }) res: Response,
   ) {
+    // ✅ Validate role
     if (!registerDto.role || !['buyer', 'seller'].includes(registerDto.role)) {
       throw new BadRequestException('Role must be either buyer or seller');
     }
 
-    const user = await this.authService.register(registerDto);
+    // ✅ Perform registration logic
+    const result = await this.authService.register(registerDto);
 
-    // ✅ Save authUser into cookie
+    // ✅ Set secure HTTP-only JWT cookie (backend use only)
+    res.cookie('token', result.token, {
+      httpOnly: true, // JS cannot access this
+      secure: process.env.NODE_ENV === 'production', // ✅ auto adjusts
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    // ✅ Set a readable cookie for frontend (non-sensitive)
     res.cookie(
       'authUser',
       JSON.stringify({
-        userId: user.userId,
-        name: user.name,
-        email: user.email,
-        role: user.role,
+        userId: result.user.userId,
+        name: result.user.name,
+        email: result.user.email,
+        role: result.user.role,
       }),
       {
-        httpOnly: false, // allow frontend JS to read
-        secure: true,   // set true if HTTPS in prod
-        sameSite: 'none',
-        path: '/',       // ensure cookie is available globally
+        httpOnly: false, // Frontend can access this
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        path: '/',
       },
     );
 
-    return user;
+    // ✅ Return response payload
+    return {
+      status: 'success',
+      message: result.message,
+      token: result.token,
+      user: result.user,
+    };
   }
 
   // ------------------ LOGIN ------------------
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login as Buyer or Seller' })
-  @ApiResponse({
-    status: 200,
-    description: 'User logged in successfully',
-  })
+  @ApiOperation({ summary: 'Login as Buyer or Seller (returns JWT token + cookies)' })
+  @ApiResponse({ status: 200, description: 'User logged in successfully' })
   async login(
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const user = await this.authService.login(loginDto);
+    const result = await this.authService.login(loginDto);
 
-    // ✅ Save authUser into cookie
+    // ✅ Set secure HTTP-only JWT cookie
+    res.cookie('token', result.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    // ✅ Set a readable cookie for frontend
     res.cookie(
       'authUser',
       JSON.stringify({
-        userId: user.userId,
-        name: user.name,
-        email: user.email,
-        role: user.role,
+        userId: result.user.userId,
+        name: result.user.name,
+        email: result.user.email,
+        role: result.user.role,
       }),
       {
         httpOnly: false,
-        secure: true,
-        sameSite: 'none',
-        path: '/', // cookie works across /seller and /buyer
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        path: '/',
       },
     );
 
-    return user;
+    return {
+      status: 'success',
+      message: result.message,
+      token: result.token,
+      user: result.user,
+    };
+  }
+
+  // ------------------ LOGOUT ------------------
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Logout and clear all cookies' })
+  @ApiResponse({ status: 200, description: 'User logged out successfully' })
+  async logout(@Res({ passthrough: true }) res: Response) {
+    res.clearCookie('token', {
+      path: '/',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    });
+    res.clearCookie('authUser', {
+      path: '/',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    });
+
+    return { status: 'success', message: 'Logged out successfully' };
   }
 }

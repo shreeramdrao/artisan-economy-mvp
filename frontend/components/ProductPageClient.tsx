@@ -52,9 +52,7 @@ export default function ProductPageClient({ productId }: Props) {
         console.error('❌ Failed to load product:', err)
       }
     }
-    if (productId) {
-      fetchProduct()
-    }
+    if (productId) fetchProduct()
   }, [productId])
 
   // ✅ Setup audio events
@@ -182,10 +180,21 @@ export default function ProductPageClient({ productId }: Props) {
         {/* Product Details */}
         <div className="space-y-6">
           <h1 className="text-3xl font-bold mb-2">{product.title}</h1>
+
+          {/* ✅ Seller Info with Avatar */}
           <div className="flex items-center space-x-4 text-gray-600">
-            <span>{product.sellerInfo?.name}</span>
-            <span>•</span>
-            <span>{product.sellerInfo?.location || 'India'}</span>
+            <img
+              src={product.sellerInfo?.avatarUrl || '/images/default-avatar.png'}
+              alt={product.sellerInfo?.name || 'Artisan'}
+              className="w-12 h-12 rounded-full object-cover border"
+            />
+            <div>
+              <p className="font-semibold">{product.sellerInfo?.name}</p>
+              <p className="text-sm">{product.sellerInfo?.location || 'India'}</p>
+              {product.sellerInfo?.bio && (
+                <p className="text-xs text-gray-500">{product.sellerInfo.bio}</p>
+              )}
+            </div>
           </div>
 
           <div className="text-3xl font-bold text-amber-600">

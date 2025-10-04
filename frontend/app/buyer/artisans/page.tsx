@@ -10,7 +10,7 @@ export default function ArtisansPage() {
   const [artisans, setArtisans] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fallbackImg = '/images/placeholder.png'
+  const fallbackImg = '/images/default-avatar.png' // ✅ consistent fallback
 
   useEffect(() => {
     async function fetchArtisans() {
@@ -42,7 +42,7 @@ export default function ArtisansPage() {
               {/* Artisan Image */}
               <div className="w-24 h-24 mb-3 bg-gray-100 rounded-full overflow-hidden">
                 <img
-                  src={artisan.imageUrl || fallbackImg}
+                  src={artisan.avatarUrl || fallbackImg} // ✅ fixed here
                   alt={artisan.name || 'Artisan'}
                   className="w-full h-full object-cover"
                 />

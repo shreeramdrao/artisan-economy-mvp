@@ -10,8 +10,16 @@ import {
   HttpCode,
   Req,
   Res,
+  UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiQuery,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { BuyerService } from './buyer.service';
 import { CheckoutDto } from './dto/checkout.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
@@ -22,8 +30,10 @@ import {
   OrderResponse,
 } from './dto/buyer-response.dto';
 import { Request, Response } from 'express';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @ApiTags('buyer')
+@ApiBearerAuth()
 @Controller('buyer')
 export class BuyerController {
   constructor(private readonly buyerService: BuyerService) {}
@@ -65,6 +75,7 @@ export class BuyerController {
   }
 
   // ----------------- CHECKOUT / ORDER -----------------
+  @UseGuards(JwtAuthGuard)
   @Post('checkout')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Process checkout (Buy Now or Cart)' })
@@ -73,10 +84,17 @@ export class BuyerController {
     description: 'Checkout processed successfully',
     type: CheckoutResponse,
   })
-  async checkout(@Body() checkoutDto: CheckoutDto): Promise<CheckoutResponse> {
-    return this.buyerService.checkout(checkoutDto);
+  async checkout(
+    @Req() req: Request,
+    @Body() checkoutDto: CheckoutDto,
+  ): Promise<CheckoutResponse> {
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+
+    return this.buyerService.checkout({ ...checkoutDto, buyerId: user.email });
   }
 
+  @UseGuards(JwtAuthGuard)
   @Post('order')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Place an order (alias for checkout)' })
@@ -85,8 +103,14 @@ export class BuyerController {
     description: 'Order placed successfully',
     type: CheckoutResponse,
   })
-  async createOrder(@Body() checkoutDto: CheckoutDto): Promise<CheckoutResponse> {
-    return this.buyerService.checkout(checkoutDto);
+  async createOrder(
+    @Req() req: Request,
+    @Body() checkoutDto: CheckoutDto,
+  ): Promise<CheckoutResponse> {
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+
+    return this.buyerService.checkout({ ...checkoutDto, buyerId: user.email });
   }
 
   // ----------------- STRIPE WEBHOOK -----------------
@@ -95,7 +119,7 @@ export class BuyerController {
   @ApiOperation({ summary: 'Stripe webhook for payment events' })
   async handleStripeWebhook(@Req() req: Request, @Res() res: Response) {
     const sig = req.headers['stripe-signature'] as string | undefined;
-    const rawBody = (req as any).body; // ✅ raw body provided by bodyParser in main.ts
+    const rawBody = (req as any).body;
 
     try {
       await this.buyerService.handleStripeWebhook(rawBody, sig);
@@ -107,15 +131,25 @@ export class BuyerController {
   }
 
   // ----------------- ORDERS -----------------
-  @Get('orders/:buyerId')
-  @ApiOperation({ summary: 'Get all orders of a buyer (with multiple products)' })
+  @UseGuards(JwtAuthGuard)
+  @Get('orders')
+  @ApiOperation({ summary: 'Get all orders of the logged-in buyer' })
   @ApiResponse({
     status: 200,
     description: 'List of orders',
     type: [OrderResponse],
   })
-  async getOrders(@Param('buyerId') buyerId: string): Promise<OrderResponse[]> {
-    return this.buyerService.getOrders(buyerId);
+  async getOrders(@Req() req: Request): Promise<OrderResponse[]> {
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+    return this.buyerService.getOrders(user.email);
+  }
+
+  // ✅ Add fallback for /buyer/orders/:buyerId → frontend support
+  @Get('orders/:buyerId')
+  @ApiOperation({ summary: 'Get orders by buyerId (fallback for frontend)' })
+  async getOrdersById(@Param('buyerId') buyerId: string) {
+    return this.buyerService.getOrders(decodeURIComponent(buyerId));
   }
 
   // ----------------- EXTRA FEATURES -----------------
@@ -138,7 +172,6 @@ export class BuyerController {
     return this.buyerService.getArtisans();
   }
 
-  // ✅ NEW: Get all products of a specific artisan
   @Get('artisan/:sellerId/products')
   @ApiOperation({ summary: 'Get all products by a specific artisan (seller)' })
   @ApiResponse({
@@ -153,44 +186,43 @@ export class BuyerController {
   }
 
   // ----------------- CART -----------------
-  @Get('cart/:buyerId')
-  @ApiOperation({ summary: 'Get enriched cart for a buyer' })
-  @ApiResponse({
-    status: 200,
-    description: 'Cart items with product details',
-    schema: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          productId: { type: 'string' },
-          quantity: { type: 'number' },
-          title: { type: 'string' },
-          price: { type: 'number' },
-          imageUrl: { type: 'string' },
-        },
-      },
-    },
-  })
-  async getCart(@Param('buyerId') buyerId: string) {
-    return this.buyerService.getCart(buyerId);
+  @UseGuards(JwtAuthGuard)
+  @Get('cart')
+  @ApiOperation({ summary: 'Get enriched cart for logged-in buyer' })
+  async getCart(@Req() req: Request) {
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+    return this.buyerService.getCart(user.email);
   }
 
-  @Post('cart/:buyerId')
+  // ✅ Add fallback for /buyer/cart/:buyerId → frontend support
+  @Get('cart/:buyerId')
+  @ApiOperation({ summary: 'Get cart by buyerId (fallback for frontend)' })
+  async getCartById(@Param('buyerId') buyerId: string) {
+    return this.buyerService.getCart(decodeURIComponent(buyerId));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('cart')
   @ApiOperation({ summary: 'Add item to cart (returns updated cart)' })
   async addToCart(
-    @Param('buyerId') buyerId: string,
+    @Req() req: Request,
     @Body() body: { productId: string; quantity: number },
   ) {
-    return this.buyerService.addToCart(buyerId, body.productId, body.quantity);
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+    return this.buyerService.addToCart(user.email, body.productId, body.quantity);
   }
 
-  @Delete('cart/:buyerId/:productId')
+  @UseGuards(JwtAuthGuard)
+  @Delete('cart/:productId')
   @ApiOperation({ summary: 'Remove item from cart (returns updated cart)' })
   async removeFromCart(
-    @Param('buyerId') buyerId: string,
+    @Req() req: Request,
     @Param('productId') productId: string,
   ) {
-    return this.buyerService.removeFromCart(buyerId, productId);
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+    return this.buyerService.removeFromCart(user.email, productId);
   }
 }

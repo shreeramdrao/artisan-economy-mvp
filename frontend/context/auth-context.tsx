@@ -1,4 +1,3 @@
-// frontend/context/auth-context.tsx
 'use client'
 
 import {
@@ -9,6 +8,7 @@ import {
   ReactNode,
 } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
+import api from '@/lib/api'
 
 type Role = 'seller' | 'buyer'
 
@@ -24,63 +24,66 @@ type AuthContextType = {
   isAuthenticated: boolean
   login: (userData: User) => void
   logout: () => void
+  loading: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
   const router = useRouter()
   const pathname = usePathname()
 
-  // ✅ Load from localStorage on mount
+  // ✅ Auto-load from cookies (authUser) on first mount
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    const loadUser = async () => {
       try {
-        const storedUser = localStorage.getItem('authUser')
-        if (storedUser) {
-          setUser(JSON.parse(storedUser))
+        // Check if we have authUser cookie
+        const cookieUser = getCookie('authUser')
+        if (cookieUser) {
+          const parsed = JSON.parse(decodeURIComponent(cookieUser))
+          setUser(parsed)
         }
-      } catch (error) {
-        console.error('Failed to parse stored user:', error)
-        localStorage.removeItem('authUser')
-      }
-    }
-  }, [])
 
-  // ✅ Sync across tabs
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'authUser') {
-        if (e.newValue) {
-          try {
-            setUser(JSON.parse(e.newValue))
-          } catch {
-            setUser(null)
+        // Optional: verify token via backend (ensures JWT still valid)
+        const tokenCookie = getCookie('token')
+        if (tokenCookie) {
+          const res = await api.post('/auth/verify', { token: tokenCookie })
+          if (!res.data.valid) {
+            console.warn('JWT expired, forcing logout...')
+            logout()
           }
-        } else {
-          setUser(null)
         }
+      } catch (err) {
+        console.error('Failed to load user from cookie:', err)
+        logout()
+      } finally {
+        setLoading(false)
       }
     }
-    window.addEventListener('storage', handleStorageChange)
-    return () => window.removeEventListener('storage', handleStorageChange)
+
+    loadUser()
   }, [])
 
-  // ✅ Save user → localStorage + cookie + redirect
+  // ✅ Utility to get a cookie by name
+  const getCookie = (name: string): string | null => {
+    if (typeof document === 'undefined') return null
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+    return match ? match[2] : null
+  }
+
+  // ✅ Save user → cookie + localStorage
   const login = (userData: User) => {
     if (typeof window !== 'undefined') {
-      // Save to localStorage
       localStorage.setItem('authUser', JSON.stringify(userData))
-
-      // Save to cookie (middleware reads this)
       document.cookie = `authUser=${encodeURIComponent(
         JSON.stringify(userData)
-      )}; path=/`
+      )}; path=/; SameSite=None; Secure`
     }
     setUser(userData)
 
-    // 🔑 Redirect
+    // Redirect based on role
     if (userData.role === 'seller') {
       router.push('/seller')
     } else {
@@ -88,18 +91,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // ✅ Clear user everywhere + redirect to login
+  // ✅ Logout → clear all data
   const logout = () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('authUser')
-
-      // Expire cookie
-      document.cookie =
-        'authUser=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+      document.cookie = 'authUser=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None; Secure'
+      document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None; Secure'
     }
+
     setUser(null)
 
-    // 🔑 If user is on a protected page, redirect back after login
+    // Redirect based on where the user was
     if (pathname.startsWith('/seller')) {
       router.push('/auth/login?redirect=/seller')
     } else if (pathname.startsWith('/buyer')) {
@@ -109,6 +111,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // ✅ Sync user changes across tabs
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'authUser') {
+        if (e.newValue) {
+          setUser(JSON.parse(e.newValue))
+        } else {
+          setUser(null)
+        }
+      }
+    }
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
+  }, [])
+
   return (
     <AuthContext.Provider
       value={{
@@ -116,9 +133,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         login,
         logout,
+        loading,
       }}
     >
-      {children}
+      {!loading && children}
     </AuthContext.Provider>
   )
 }

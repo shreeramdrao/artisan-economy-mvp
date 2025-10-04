@@ -7,34 +7,39 @@ import {
 import { FirestoreService } from '../common/services/firestore.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import * as bcrypt from 'bcrypt'; // ✅ Correct import
+import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
+
+export interface JwtPayload {
+  userId: string;
+  email: string;
+  role: 'buyer' | 'seller';
+}
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
-  constructor(private readonly firestoreService: FirestoreService) {}
+  constructor(
+    private readonly firestoreService: FirestoreService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   // ------------------ REGISTER ------------------
   async register(dto: RegisterDto) {
     const collection = dto.role === 'seller' ? 'sellers' : 'buyers';
 
-    // 🔑 Use email as unique identifier
-    const existingUser = await this.firestoreService.getDocument(
-      collection,
-      dto.email,
-    );
+    // 🔎 Check if email already exists
+    const existingUser = await this.firestoreService.getDocument(collection, dto.email);
     if (existingUser) {
-      throw new BadRequestException(
-        `${dto.role} already registered with this email`,
-      );
+      throw new BadRequestException(`${dto.role} already registered with this email`);
     }
 
-    // Hash password
+    // 🔒 Hash password before saving
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
     const userData: any = {
-      id: dto.email, // store email as ID in Firestore
+      id: dto.email,
       name: dto.name,
       email: dto.email,
       phone: dto.phone || '',
@@ -44,26 +49,34 @@ export class AuthService {
     };
 
     if (dto.role === 'seller') {
-      userData.products = [];
-      userData.totalSales = 0;
-      userData.totalRevenue = 0;
-      userData.rating = 0;
-      userData.reviewCount = 0;
-      userData.isVerified = false;
+      Object.assign(userData, {
+        products: [],
+        totalSales: 0,
+        totalRevenue: 0,
+        rating: 0,
+        reviewCount: 0,
+        isVerified: false,
+      });
     }
 
+    // 🧾 Save to Firestore
     await this.firestoreService.createDocument(collection, dto.email, userData);
-
     this.logger.log(`${dto.role} registered successfully: ${dto.email}`);
 
-    // ✅ Return consistent structure like login()
+    // 🎟️ Generate JWT Token
+    const payload: JwtPayload = { userId: userData.id, email: userData.email, role: userData.role };
+    const token = this.jwtService.sign(payload);
+
     return {
       status: 'success',
       message: `${dto.role} registered successfully`,
-      userId: userData.id,
-      name: userData.name,
-      email: userData.email,
-      role: userData.role,
+      token,
+      user: {
+        userId: userData.id,
+        name: userData.name,
+        email: userData.email,
+        role: userData.role,
+      },
     };
   }
 
@@ -82,16 +95,33 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // ✅ Return same consistent structure
     this.logger.log(`${dto.role} logged in successfully: ${dto.email}`);
+
+    // 🎟️ Generate JWT Token
+    const payload: JwtPayload = { userId: user.id, email: user.email, role: user.role };
+    const token = this.jwtService.sign(payload);
 
     return {
       status: 'success',
       message: `${dto.role} logged in successfully`,
-      userId: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
+      token,
+      user: {
+        userId: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
     };
+  }
+
+  // ------------------ VERIFY TOKEN ------------------
+  async verifyToken(token: string): Promise<{ valid: boolean; decoded?: JwtPayload; message?: string }> {
+    try {
+      const decoded = this.jwtService.verify<JwtPayload>(token);
+      return { valid: true, decoded };
+    } catch (err) {
+      this.logger.warn(`❌ Invalid or expired JWT: ${err.message}`);
+      return { valid: false, message: 'Invalid or expired token' };
+    }
   }
 }

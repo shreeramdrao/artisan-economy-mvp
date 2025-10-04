@@ -18,15 +18,17 @@ export class FirestoreService {
         return;
       }
 
+      // ✅ FIX: Enable ignoreUndefinedProperties so Firestore ignores `undefined` values
       this.firestore = new Firestore({
         projectId,
         keyFilename: keyFilename || undefined,
         databaseId:
           this.configService.get('firestore.databaseId') || '(default)',
+        ignoreUndefinedProperties: true, // 🔥 Added line
       });
 
       this.initialized = true;
-      this.logger.log('Firestore initialized successfully');
+      this.logger.log('Firestore initialized successfully (ignoreUndefinedProperties enabled)');
     } catch (error) {
       this.logger.error('Failed to initialize Firestore:', error);
     }

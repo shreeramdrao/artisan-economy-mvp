@@ -86,6 +86,7 @@ export class BuyerService {
         location: seller?.location || 'India',
         rating: seller?.rating || 4.5,
         bio: seller?.bio || '',
+        avatarUrl: seller?.avatarUrl || '/images/default-avatar.png', // ✅ added avatar for product detail
       },
       specifications: {
         materials: 'Handcrafted materials',
@@ -130,12 +131,8 @@ export class BuyerService {
   // ----------------- CHECKOUT -----------------
   async checkout(dto: CheckoutDto): Promise<CheckoutResponse> {
     try {
-      // make sure buyerId is present and valid
       if (!dto.buyerId || dto.buyerId === 'guest') {
-        this.logger.warn('Checkout request missing buyerId or using guest. Ensure frontend sends the logged-in userId.');
-        // We still allow "guest" orders, but they will be stored against 'guest'.
-        // If you prefer to *reject* such requests, uncomment below:
-        // throw new BadRequestException('buyerId is required for checkout');
+        this.logger.warn('Checkout request missing buyerId or using guest.');
       }
 
       const orderId = uuidv4();
@@ -213,7 +210,7 @@ export class BuyerService {
       if (dto.notes) orderData.notes = dto.notes;
 
       await this.firestoreService.createDocument('orders', orderId, orderData);
-      this.logger.log(`✅ Order created successfully: ${orderId} (buyerId=${orderData.buyerId})`);
+      this.logger.log(`✅ Order created successfully: ${orderId}`);
 
       return {
         orderId,
@@ -277,30 +274,23 @@ export class BuyerService {
 
   // ----------------- ORDERS -----------------
   async getOrders(buyerId: string) {
-    if (!buyerId) {
-      throw new BadRequestException('buyerId is required');
-    }
+    if (!buyerId) throw new BadRequestException('buyerId is required');
 
-    // query only orders for this buyer
     let orders = await this.firestoreService.queryDocuments('orders', {
       field: 'buyerId',
       operator: '==',
       value: buyerId,
     });
 
-    // Normalize createdAt values for robust sorting (Date | string | Firestore Timestamp)
     const normalizeTime = (t: any) => {
       if (!t) return 0;
       if (t instanceof Date) return t.getTime();
       if (typeof t === 'string') return new Date(t).getTime();
-      // Firestore Timestamp (seconds + nanos)
       if (t.seconds) return t.seconds * 1000;
       return 0;
     };
 
-    orders.sort(
-      (a, b) => normalizeTime(b.createdAt) - normalizeTime(a.createdAt),
-    );
+    orders.sort((a, b) => normalizeTime(b.createdAt) - normalizeTime(a.createdAt));
 
     return orders.map((o) => ({
       orderId: o.id,
@@ -355,15 +345,16 @@ export class BuyerService {
   // ----------------- ARTISANS -----------------
   async getArtisans() {
     const artisans = await this.firestoreService.queryDocuments('sellers');
+
     return artisans.map((a) => ({
       id: a.id,
-      name: a.name,
+      name: a.shopName || a.name,
       location: a.location || 'India',
       bio: a.bio || 'Traditional artisan',
       rating: a.rating || 0,
       totalSales: a.totalSales || 0,
       isVerified: a.isVerified || false,
-      imageUrl: a.imageUrl || '/placeholder.png',
+      avatarUrl: a.avatarUrl || '/images/default-avatar.png', // ✅ fixed
     }));
   }
 
