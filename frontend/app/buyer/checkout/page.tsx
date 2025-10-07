@@ -12,6 +12,12 @@ import { useCart } from '@/context/cart-context'
 import { useAuth } from '@/context/auth-context'
 import { formatPrice } from '@/lib/utils'
 
+declare global {
+  interface Window {
+    Razorpay?: any
+  }
+}
+
 function CheckoutForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -30,13 +36,14 @@ function CheckoutForm() {
     state: '',
     pincode: '',
     phone: '',
-    paymentMethod: 'stripe',
+    paymentMethod: 'stripe', // Default
   })
 
   const [loading, setLoading] = useState(false)
   const [product, setProduct] = useState<any | null>(null)
   const [productLoading, setProductLoading] = useState(false)
 
+  // Fetch product if "Buy Now"
   useEffect(() => {
     async function loadProduct() {
       if (!productId) return
@@ -62,7 +69,7 @@ function CheckoutForm() {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
 
-  // Build checkout items (Buy Now or Cart)
+  // Checkout items (Buy Now or Cart)
   const checkoutItems = useMemo(() => {
     if (productId) {
       return [{ productId, quantity }]
@@ -73,23 +80,91 @@ function CheckoutForm() {
     }))
   }, [productId, quantity, cart])
 
-  // Calculate total amount
+  // Total amount calculation
   const total = useMemo(() => {
     if (productId) {
-      // if product fetched, use its price; fallback to 0
       const price = product?.price || product?.price?.amount || 0
       return quantity * price
     }
     return cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
   }, [productId, quantity, product, cart])
 
+  /* ----------------- ✅ Razorpay Script Loader ----------------- */
+  const loadRazorpayScript = () => {
+    return new Promise<boolean>((resolve) => {
+      if (document.getElementById('razorpay-script')) return resolve(true)
+      const script = document.createElement('script')
+      script.id = 'razorpay-script'
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+      script.onload = () => resolve(true)
+      script.onerror = () => resolve(false)
+      document.body.appendChild(script)
+    })
+  }
+
+  /* ----------------- ✅ Razorpay Flow ----------------- */
+  const handleRazorpayPayment = async (orderData: any) => {
+    const res = await loadRazorpayScript()
+    if (!res) {
+      toast({
+        title: 'Error',
+        description: 'Failed to load Razorpay SDK. Check your internet.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const options = {
+      key: orderData.razorpayKey,
+      amount: orderData.amount * 100,
+      currency: 'INR',
+      name: 'Artisan Economy',
+      description: 'Purchase from artisan store',
+      order_id: orderData.razorpayOrderId,
+      handler: async (response: any) => {
+        try {
+          const verifyRes = await buyerApi.verifyRazorpayPayment({
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          })
+          if (verifyRes?.success) {
+            toast({
+              title: '✅ Payment Successful',
+              description: 'Your order has been confirmed!',
+            })
+            clearCart()
+            router.push('/buyer/orders')
+          }
+        } catch (err) {
+          console.error('❌ Payment verification failed:', err)
+          toast({
+            title: 'Error',
+            description: 'Payment verification failed. Please contact support.',
+            variant: 'destructive',
+          })
+        }
+      },
+      prefill: {
+        name: form.name,
+        email: user?.email || '',
+        contact: form.phone,
+      },
+      theme: { color: '#f97316' },
+    }
+
+    const paymentObject = new window.Razorpay(options)
+    paymentObject.open()
+  }
+
+  /* ----------------- ✅ Checkout Submission ----------------- */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (checkoutItems.length === 0) {
       toast({
         title: 'Error',
-        description: 'Your cart is empty and no product selected.',
+        description: 'Your cart is empty or product missing.',
         variant: 'destructive',
       })
       return
@@ -97,8 +172,6 @@ function CheckoutForm() {
 
     try {
       setLoading(true)
-
-      // Use real logged-in buyerId (fallback to 'guest' only if missing)
       const buyerId = user?.userId || 'guest'
 
       const checkoutData = {
@@ -117,20 +190,30 @@ function CheckoutForm() {
 
       const res = await buyerApi.checkout(checkoutData)
 
-      if (res.paymentUrl && form.paymentMethod === 'stripe') {
-        // redirect to stripe
+      // ✅ Stripe flow
+      if (form.paymentMethod === 'stripe' && res.paymentUrl) {
         window.location.href = res.paymentUrl
-      } else if (form.paymentMethod === 'cod') {
+      }
+
+      // ✅ Razorpay flow
+      else if (form.paymentMethod === 'razorpay' && res.razorpayOrderId) {
+        await handleRazorpayPayment(res)
+      }
+
+      // ✅ COD flow
+      else if (form.paymentMethod === 'cod') {
         toast({
           title: '✅ Order Placed',
           description: 'Your order has been placed successfully.',
         })
         clearCart()
         router.push('/buyer/orders')
-      } else {
+      }
+
+      else {
         toast({
-          title: '⚠️ Unexpected',
-          description: 'Unknown payment method or missing payment URL.',
+          title: '⚠️ Error',
+          description: 'Something went wrong. Please try again.',
           variant: 'destructive',
         })
       }
@@ -146,7 +229,7 @@ function CheckoutForm() {
     }
   }
 
-  // UI state while loading product for Buy Now
+  /* ----------------- ✅ UI Rendering ----------------- */
   if (productId && productLoading) {
     return <div className="text-center mt-10">⏳ Loading product details...</div>
   }
@@ -160,21 +243,11 @@ function CheckoutForm() {
           <div className="grid gap-4">
             <div>
               <Label>Name</Label>
-              <Input
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                required
-              />
+              <Input name="name" value={form.name} onChange={handleChange} required />
             </div>
             <div>
               <Label>Address</Label>
-              <Input
-                name="address"
-                value={form.address}
-                onChange={handleChange}
-                required
-              />
+              <Input name="address" value={form.address} onChange={handleChange} required />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -208,6 +281,7 @@ function CheckoutForm() {
               className="w-full border rounded p-2 mt-1"
             >
               <option value="stripe">Stripe (Cards / Wallets)</option>
+              <option value="razorpay">Razorpay (UPI / Cards / NetBanking)</option>
               <option value="cod">Cash on Delivery</option>
             </select>
           </div>
@@ -232,7 +306,6 @@ function CheckoutForm() {
   )
 }
 
-// Wrap in Suspense like before
 export default function CheckoutPage() {
   return (
     <Suspense fallback={<div className="text-center mt-20">Loading checkout...</div>}>

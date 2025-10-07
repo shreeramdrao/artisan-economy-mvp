@@ -9,14 +9,21 @@ import {
   CheckoutResponse,
 } from './dto/buyer-response.dto';
 import Stripe from 'stripe';
+import Razorpay from 'razorpay';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class BuyerService {
   private readonly logger = new Logger(BuyerService.name);
   private stripe: Stripe;
+  private razorpay: Razorpay;
 
   constructor(private readonly firestoreService: FirestoreService) {
     this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+    this.razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID as string,
+      key_secret: process.env.RAZORPAY_KEY_SECRET as string,
+    });
   }
 
   // ----------------- PRODUCTS -----------------
@@ -27,22 +34,14 @@ export class BuyerService {
       value: 'published',
     });
 
-    if (query.category) {
-      products = products.filter((p) => p.category === query.category);
-    }
-    if (query.minPrice) {
-      products = products.filter((p) => p.price.amount >= query.minPrice);
-    }
-    if (query.maxPrice) {
-      products = products.filter((p) => p.price.amount <= query.maxPrice);
-    }
+    if (query.category) products = products.filter((p) => p.category === query.category);
+    if (query.minPrice) products = products.filter((p) => p.price.amount >= query.minPrice);
+    if (query.maxPrice) products = products.filter((p) => p.price.amount <= query.maxPrice);
 
     if (query.sortBy === 'price') {
       products.sort((a, b) => a.price.amount - b.price.amount);
     } else if (query.sortBy === 'date') {
-      products.sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      );
+      products.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     } else if (query.sortBy === 'popularity') {
       products.sort((a, b) => (b.views || 0) - (a.views || 0));
     }
@@ -51,7 +50,8 @@ export class BuyerService {
       productId: product.id,
       title: product.title,
       price: product.price.amount,
-      imageUrl: product.images?.polished || product.images?.enhanced || product.images?.original,
+      imageUrl:
+        product.images?.polished || product.images?.enhanced || product.images?.original,
       sellerName: product.sellerName,
       category: product.category,
       tags: product.tags,
@@ -86,7 +86,7 @@ export class BuyerService {
         location: seller?.location || 'India',
         rating: seller?.rating || 4.5,
         bio: seller?.bio || '',
-        avatarUrl: seller?.avatarUrl || '/images/default-avatar.png', // ✅ added avatar for product detail
+        avatarUrl: seller?.avatarUrl || '/images/default-avatar.png',
       },
       specifications: {
         materials: 'Handcrafted materials',
@@ -102,28 +102,45 @@ export class BuyerService {
     };
   }
 
-  // ✅ Products by specific artisan
+  // ✅ PRODUCTS BY ARTISAN
   async getProductsByArtisan(sellerId: string): Promise<ProductListResponse[]> {
-    const products = await this.firestoreService.queryDocuments('products', {
+    const decodedSellerId = decodeURIComponent(sellerId);
+
+    let products = await this.firestoreService.queryDocuments('products', {
       field: 'sellerId',
       operator: '==',
-      value: sellerId,
+      value: decodedSellerId,
     });
 
     if (!products || products.length === 0) {
+      products = await this.firestoreService.queryDocuments('products', {
+        field: 'sellerEmail',
+        operator: '==',
+        value: decodedSellerId,
+      });
+    }
+
+    if (!products || products.length === 0) {
+      this.logger.warn(`⚠️ No products found for artisan: ${decodedSellerId}`);
       return [];
     }
+
+    const seller = await this.firestoreService.getDocument('sellers', decodedSellerId);
 
     return products.map((product) => ({
       productId: product.id,
       title: product.title,
       price: product.price.amount,
-      imageUrl: product.images?.polished || product.images?.enhanced || product.images?.original,
-      sellerName: product.sellerName,
+      imageUrl:
+        product.images?.polished ||
+        product.images?.enhanced ||
+        product.images?.original ||
+        '/images/default-product.png',
+      sellerName: product.sellerName || seller?.name || 'Unknown Artisan',
       category: product.category,
       tags: product.tags,
-      rating: product.rating || 0,
-      location: 'India',
+      rating: product.rating || seller?.rating || 0,
+      location: seller?.location || 'India',
       status: product.status || 'draft',
     }));
   }
@@ -142,7 +159,6 @@ export class BuyerService {
         ? dto.items
         : [{ productId: dto.productId, quantity: dto.quantity }];
 
-      const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
       let totalAmount = 0;
       const orderProducts: any[] = [];
 
@@ -152,15 +168,6 @@ export class BuyerService {
 
         const itemTotal = product.price.amount * item.quantity;
         totalAmount += itemTotal;
-
-        lineItems.push({
-          price_data: {
-            currency: 'inr',
-            product_data: { name: product.title },
-            unit_amount: product.price.amount * 100,
-          },
-          quantity: item.quantity,
-        });
 
         orderProducts.push({
           productId: item.productId,
@@ -175,11 +182,20 @@ export class BuyerService {
       let status = 'pending';
       let paymentStatus = 'pending';
       let stripeSessionId: string | null = null;
+      let razorpayOrderId: string | null = null;
 
+      // ✅ STRIPE FLOW
       if (dto.paymentMethod === PaymentMethod.STRIPE) {
         const session = await this.stripe.checkout.sessions.create({
           payment_method_types: ['card'],
-          line_items: lineItems,
+          line_items: orderProducts.map((p) => ({
+            price_data: {
+              currency: 'inr',
+              product_data: { name: p.productTitle },
+              unit_amount: p.price * 100,
+            },
+            quantity: p.quantity,
+          })),
           mode: 'payment',
           success_url: `${process.env.FRONTEND_URL}/buyer/orders?success=true&orderId=${orderId}`,
           cancel_url: `${process.env.FRONTEND_URL}/buyer/checkout?canceled=true`,
@@ -189,7 +205,23 @@ export class BuyerService {
 
         paymentUrl = session.url!;
         stripeSessionId = session.id;
-      } else if (dto.paymentMethod === PaymentMethod.COD) {
+      }
+
+      // ✅ RAZORPAY FLOW
+      else if (dto.paymentMethod === PaymentMethod.RAZORPAY) {
+        const razorOrder = await this.razorpay.orders.create({
+          amount: Math.round(totalAmount * 100),
+          currency: 'INR',
+          receipt: orderId,
+        });
+
+        razorpayOrderId = razorOrder.id;
+        status = 'initiated';
+        paymentStatus = 'pending';
+      }
+
+      // ✅ COD FLOW
+      else if (dto.paymentMethod === PaymentMethod.COD) {
         status = 'confirmed';
         paymentStatus = 'cod_pending';
       }
@@ -207,23 +239,63 @@ export class BuyerService {
       };
 
       if (stripeSessionId) orderData.stripeSessionId = stripeSessionId;
+      if (razorpayOrderId) orderData.razorpayOrderId = razorpayOrderId;
       if (dto.notes) orderData.notes = dto.notes;
 
       await this.firestoreService.createDocument('orders', orderId, orderData);
       this.logger.log(`✅ Order created successfully: ${orderId}`);
 
-      return {
+      // Build response object conditionally so TypeScript consumers won't error on extra fields
+      const baseResponse: any = {
         orderId,
         amount: totalAmount,
         currency: 'INR',
         status,
         message: 'Order created successfully',
-        paymentUrl,
+        paymentUrl, // Stripe (may be null)
       };
+
+      // Add Razorpay data only when present
+      if (razorpayOrderId) {
+        baseResponse.razorpayOrderId = razorpayOrderId;
+        baseResponse.razorpayKey = process.env.RAZORPAY_KEY_ID || null;
+      }
+
+      return baseResponse as CheckoutResponse;
     } catch (error) {
       this.logger.error('❌ Error processing checkout:', error);
       throw error;
     }
+  }
+
+  // ----------------- VERIFY RAZORPAY PAYMENT -----------------
+  async verifyRazorpayPayment(orderId: string, paymentId: string, signature: string) {
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET as string)
+      .update(`${orderId}|${paymentId}`)
+      .digest('hex');
+
+    if (expectedSignature !== signature) {
+      throw new BadRequestException('Invalid payment signature');
+    }
+
+    const orders = await this.firestoreService.queryDocuments('orders', {
+      field: 'razorpayOrderId',
+      operator: '==',
+      value: orderId,
+    });
+
+    if (orders.length > 0) {
+      const order = orders[0];
+      await this.firestoreService.updateDocument('orders', order.id, {
+        paymentStatus: 'completed',
+        status: 'confirmed',
+        razorpayPaymentId: paymentId,
+        updatedAt: new Date(),
+      });
+    }
+
+    return { success: true };
   }
 
   // ----------------- STRIPE WEBHOOK -----------------
@@ -336,7 +408,8 @@ export class BuyerService {
         productId: product.id,
         title: product.title,
         price: product.price.amount,
-        imageUrl: product.images?.polished || product.images?.enhanced || product.images?.original,
+        imageUrl:
+          product.images?.polished || product.images?.enhanced || product.images?.original,
         sellerName: product.sellerName,
         category: product.category,
       }));
@@ -354,7 +427,7 @@ export class BuyerService {
       rating: a.rating || 0,
       totalSales: a.totalSales || 0,
       isVerified: a.isVerified || false,
-      avatarUrl: a.avatarUrl || '/images/default-avatar.png', // ✅ fixed
+      avatarUrl: a.avatarUrl || '/images/default-avatar.png',
     }));
   }
 
@@ -391,11 +464,8 @@ export class BuyerService {
     };
 
     const existing = cart.items.find((i: any) => i.productId === productId);
-    if (existing) {
-      existing.quantity += quantity;
-    } else {
-      cart.items.push({ productId, quantity });
-    }
+    if (existing) existing.quantity += quantity;
+    else cart.items.push({ productId, quantity });
 
     await this.firestoreService.setDocument('carts', buyerId, cart);
     return this.getCart(buyerId);

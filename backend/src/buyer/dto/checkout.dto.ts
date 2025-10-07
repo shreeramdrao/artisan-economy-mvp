@@ -10,7 +10,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-// ----------------- Shipping Address -----------------
+/* ----------------- Shipping Address ----------------- */
 class ShippingAddressDto {
   @ApiProperty({ example: 'John Doe' })
   @IsString()
@@ -37,13 +37,14 @@ class ShippingAddressDto {
   pincode: string;
 }
 
-// ----------------- Payment Method Enum -----------------
+/* ----------------- Payment Method Enum ----------------- */
 export enum PaymentMethod {
   STRIPE = 'stripe',
+  RAZORPAY = 'razorpay',
   COD = 'cod',
 }
 
-// ----------------- Cart Item DTO -----------------
+/* ----------------- Cart Item DTO ----------------- */
 class CartItemDto {
   @ApiProperty({ example: 'product-12345' })
   @IsString()
@@ -55,7 +56,7 @@ class CartItemDto {
   quantity: number;
 }
 
-// ----------------- Checkout DTO -----------------
+/* ----------------- Checkout DTO ----------------- */
 export class CheckoutDto {
   // ✅ Option 1: Single product checkout
   @ApiProperty({ example: 'product-12345', required: false })
@@ -85,7 +86,11 @@ export class CheckoutDto {
   items?: CartItemDto[];
 
   // ✅ Common Fields
-  @ApiProperty({ enum: PaymentMethod, example: PaymentMethod.STRIPE })
+  @ApiProperty({
+    enum: PaymentMethod,
+    example: PaymentMethod.STRIPE,
+    description: 'Payment method — choose one: stripe, razorpay, cod',
+  })
   @IsEnum(PaymentMethod, {
     message: `paymentMethod must be one of: ${Object.values(PaymentMethod).join(', ')}`,
   })

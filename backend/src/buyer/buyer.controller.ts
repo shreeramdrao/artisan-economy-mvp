@@ -90,7 +90,6 @@ export class BuyerController {
   ): Promise<CheckoutResponse> {
     const user = req.user as any;
     if (!user?.email) throw new BadRequestException('Not authenticated');
-
     return this.buyerService.checkout({ ...checkoutDto, buyerId: user.email });
   }
 
@@ -109,8 +108,30 @@ export class BuyerController {
   ): Promise<CheckoutResponse> {
     const user = req.user as any;
     if (!user?.email) throw new BadRequestException('Not authenticated');
-
     return this.buyerService.checkout({ ...checkoutDto, buyerId: user.email });
+  }
+
+  // ----------------- RAZORPAY PAYMENT VERIFICATION -----------------
+  @Post('razorpay/verify')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify Razorpay payment signature' })
+  async verifyRazorpayPayment(
+    @Body()
+    body: {
+      razorpay_order_id: string;
+      razorpay_payment_id: string;
+      razorpay_signature: string;
+    },
+  ) {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = body;
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      throw new BadRequestException('Missing Razorpay verification fields');
+    }
+    return this.buyerService.verifyRazorpayPayment(
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+    );
   }
 
   // ----------------- STRIPE WEBHOOK -----------------
@@ -145,7 +166,6 @@ export class BuyerController {
     return this.buyerService.getOrders(user.email);
   }
 
-  // ✅ Add fallback for /buyer/orders/:buyerId → frontend support
   @Get('orders/:buyerId')
   @ApiOperation({ summary: 'Get orders by buyerId (fallback for frontend)' })
   async getOrdersById(@Param('buyerId') buyerId: string) {
@@ -182,7 +202,8 @@ export class BuyerController {
   async getArtisanProducts(
     @Param('sellerId') sellerId: string,
   ): Promise<ProductListResponse[]> {
-    return this.buyerService.getProductsByArtisan(sellerId);
+    const decodedSellerId = decodeURIComponent(sellerId);
+    return this.buyerService.getProductsByArtisan(decodedSellerId);
   }
 
   // ----------------- CART -----------------
@@ -195,7 +216,6 @@ export class BuyerController {
     return this.buyerService.getCart(user.email);
   }
 
-  // ✅ Add fallback for /buyer/cart/:buyerId → frontend support
   @Get('cart/:buyerId')
   @ApiOperation({ summary: 'Get cart by buyerId (fallback for frontend)' })
   async getCartById(@Param('buyerId') buyerId: string) {

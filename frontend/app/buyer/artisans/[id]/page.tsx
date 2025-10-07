@@ -9,26 +9,26 @@ import Link from 'next/link'
 import { formatPrice } from '@/lib/utils'
 
 export default function ArtisanProductsPage() {
-  const { id: rawId } = useParams() // artisan ID from URL
-  const id = decodeURIComponent(rawId as string) // ✅ decode email-based IDs
+  const { id: rawId } = useParams()
+  const sellerId = decodeURIComponent(rawId as string) // ✅ clearer variable name
 
   const [artisan, setArtisan] = useState<any>(null)
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fallbackImg = '/images/default-avatar.png' // ✅ consistent fallback
+  const fallbackImg = '/images/default-avatar.png'
 
   useEffect(() => {
     async function fetchData() {
       try {
-        // ✅ Get artisan details
+        // ✅ 1. Fetch all artisans and find this seller
         const artisans = await buyerApi.getArtisans()
-        const found = artisans.find((a: any) => a.id === id)
+        const found = artisans.find((a: any) => a.id === sellerId)
         setArtisan(found || null)
 
-        // ✅ Get artisan’s products
-        if (id) {
-          const productsData = await buyerApi.getArtisanProducts(id)
+        // ✅ 2. Fetch this artisan's products from correct API route
+        if (sellerId) {
+          const productsData = await buyerApi.getArtisanProducts(sellerId)
           setProducts(productsData || [])
         }
       } catch (err) {
@@ -37,8 +37,9 @@ export default function ArtisanProductsPage() {
         setLoading(false)
       }
     }
+
     fetchData()
-  }, [id])
+  }, [sellerId])
 
   if (loading) return <p className="p-8 text-center">Loading artisan...</p>
   if (!artisan) return <p className="p-8 text-center">Artisan not found</p>
@@ -50,7 +51,7 @@ export default function ArtisanProductsPage() {
         <div className="flex items-center space-x-6">
           <div className="w-20 h-20 bg-gray-100 rounded-full overflow-hidden">
             <img
-              src={artisan.avatarUrl || fallbackImg} // ✅ FIXED HERE
+              src={artisan.avatarUrl || fallbackImg}
               alt={artisan.name || 'Artisan'}
               className="w-full h-full object-cover"
             />

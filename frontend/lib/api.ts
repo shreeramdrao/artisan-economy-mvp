@@ -11,7 +11,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true, // ✅ Send cookies
+  withCredentials: true, // ✅ Send cookies for JWT
 })
 
 /* ----------------- ✅ Interceptors ----------------- */
@@ -169,6 +169,16 @@ export const buyerApi = {
     return res.data
   },
 
+  /* ✅ Verify Razorpay payment signature */
+  verifyRazorpayPayment: async (data: {
+    razorpay_order_id: string
+    razorpay_payment_id: string
+    razorpay_signature: string
+  }) => {
+    const res = await api.post('/buyer/razorpay/verify', data)
+    return res.data
+  },
+
   // ✅ Properly encode buyerId (email-safe)
   getOrders: async (buyerId: string) => {
     const safeId = encodeURIComponent(buyerId)
@@ -201,7 +211,7 @@ export const buyerApi = {
 
   getArtisanProducts: async (artisanId: string) => {
     const safeId = encodeURIComponent(artisanId)
-    const res = await api.get(`/buyer/artist/${safeId}/products`)
+    const res = await api.get(`/buyer/artisan/${safeId}/products`)
     return res.data
   },
 }

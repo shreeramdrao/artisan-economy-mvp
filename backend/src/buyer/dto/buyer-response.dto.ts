@@ -158,6 +158,12 @@ export class CheckoutResponse {
 
   @ApiProperty({ required: false })
   paymentUrl?: string;
+
+  @ApiProperty({ required: false })
+  razorpayOrderId?: string; 
+
+  @ApiProperty({ required: false })
+  razorpayKey?: string;  
 }
 
 // ----------------- ORDER PRODUCT -----------------
