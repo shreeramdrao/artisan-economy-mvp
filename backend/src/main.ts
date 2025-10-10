@@ -1,21 +1,23 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { join } from 'path';
 import { AppModule } from './app.module';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import * as bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { Request, Response } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
+  const logger = new Logger('Bootstrap'); // ✅ Use static logger
 
-  // ✅ Secure headers (prevents common web vulnerabilities)
+  // ✅ Secure headers
   app.use(helmet());
 
   // ✅ Serve static assets (favicon, apple-touch-icon, etc.)
@@ -29,28 +31,27 @@ async function bootstrap() {
     bodyParser.raw({ type: 'application/json' }),
   );
 
-  // ✅ Cookie parser (read cookies like JWT + user info)
+  // ✅ Cookie parser (JWT + user info)
   app.use(cookieParser());
 
   // ✅ JSON & URL-encoded parsers
   app.use(bodyParser.json({ limit: '10mb' }));
   app.use(bodyParser.urlencoded({ extended: true }));
 
-  // ✅ Set global API prefix
+  // ✅ Global prefix
   app.setGlobalPrefix('api');
 
-  // ✅ CORS configuration (Safari + HTTPS-friendly)
+  // ✅ CORS configuration (Production-ready)
   app.enableCors({
-    origin: configService.get('FRONTEND_URL') || 'http://localhost:3000',
-    credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'X-Requested-With',
-      'Accept',
-      'Origin',
+    origin: [
+      'https://artisan-frontend-188692597311.asia-south1.run.app',
+      'https://buyerartisaneconomy.in',
+      'https://sellerartisaneconomy.in',
+      'http://localhost:3000',
     ],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
   });
 
   // ✅ Global validation pipe
@@ -63,11 +64,11 @@ async function bootstrap() {
   );
 
   // ✅ Global filters & interceptors
-  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalFilters(new GlobalExceptionFilter(configService));
   app.useGlobalInterceptors(new LoggingInterceptor());
 
-  // ✅ Swagger setup (with JWT support)
-  const config = new DocumentBuilder()
+  // ✅ Swagger setup
+  const swaggerConfig = new DocumentBuilder()
     .setTitle('Artisan Economy API')
     .setDescription('AI-powered marketplace for Indian artisans')
     .setVersion('1.0')
@@ -81,18 +82,62 @@ async function bootstrap() {
     .addTag('ai', 'AI services')
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api/docs', app, document, {
     swaggerOptions: { persistAuthorization: true },
   });
 
-  // ✅ Server startup
-  const port = configService.get('PORT') || 8080;
-  await app.listen(port, '0.0.0.0');
+  // ✅ Health endpoints for Cloud Run
+  app.getHttpAdapter().get('/api/health', (req: Request, res: Response) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
 
-  console.log(
-    `🚀 Artisan Economy backend running at: http://localhost:${port}/api/docs`,
-  );
+  app.getHttpAdapter().get('/api/ready', (req: Request, res: Response) => {
+    res.json({
+      status: 'ready',
+      service: 'artisan-economy-backend',
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  app.getHttpAdapter().get('/api/live', (req: Request, res: Response) => {
+    res.json({
+      status: 'alive',
+      service: 'artisan-economy-backend',
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // ✅ Start server
+  const port = process.env.PORT || 4000;
+  await app.listen(port);
+  logger.log(`🚀 Artisan Economy backend running at: http://localhost:${port}/api/docs`);
+
+  // ✅ Graceful shutdown for Cloud Run
+  const gracefulShutdown = async (signal: string) => {
+    logger.warn(`🛑 Received ${signal}. Starting graceful shutdown...`);
+    try {
+      await app.close();
+      logger.log('✅ Server closed successfully');
+      process.exit(0);
+    } catch (error) {
+      logger.error('❌ Error during shutdown:', error);
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+  process.on('uncaughtException', (error) => {
+    logger.error('❌ Uncaught Exception:', error);
+    gracefulShutdown('uncaughtException');
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    logger.error('❌ Unhandled Rejection:', { reason, promise });
+    gracefulShutdown('unhandledRejection');
+  });
 }
 
 bootstrap();

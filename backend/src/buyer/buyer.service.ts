@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
 import { FirestoreService } from '../common/services/firestore.service';
 import { CheckoutDto, PaymentMethod } from './dto/checkout.dto';
@@ -18,11 +19,14 @@ export class BuyerService {
   private stripe: Stripe;
   private razorpay: Razorpay;
 
-  constructor(private readonly firestoreService: FirestoreService) {
-    this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+  constructor(
+    private readonly firestoreService: FirestoreService,
+    private readonly configService: ConfigService,
+  ) {
+    this.stripe = new Stripe(this.configService.get('STRIPE_SECRET_KEY'));
     this.razorpay = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID as string,
-      key_secret: process.env.RAZORPAY_KEY_SECRET as string,
+      key_id: this.configService.get('RAZORPAY_KEY_ID'),
+      key_secret: this.configService.get('RAZORPAY_KEY_SECRET'),
     });
   }
 
@@ -148,6 +152,11 @@ export class BuyerService {
   // ----------------- CHECKOUT -----------------
   async checkout(dto: CheckoutDto): Promise<CheckoutResponse> {
     try {
+      // ✅ Add validation for supported payment methods
+      if (![PaymentMethod.STRIPE, PaymentMethod.RAZORPAY, PaymentMethod.COD].includes(dto.paymentMethod)) {
+        throw new BadRequestException('Unsupported payment method');
+      }
+
       if (!dto.buyerId || dto.buyerId === 'guest') {
         this.logger.warn('Checkout request missing buyerId or using guest.');
       }
@@ -197,14 +206,15 @@ export class BuyerService {
             quantity: p.quantity,
           })),
           mode: 'payment',
-          success_url: `${process.env.FRONTEND_URL}/buyer/orders?success=true&orderId=${orderId}`,
-          cancel_url: `${process.env.FRONTEND_URL}/buyer/checkout?canceled=true`,
+          success_url: `${this.configService.get('FRONTEND_URL')}/buyer/orders?success=true&orderId=${orderId}`,
+          cancel_url: `${this.configService.get('FRONTEND_URL')}/buyer/checkout?canceled=true`,
           customer_creation: 'always',
           billing_address_collection: 'required',
         });
 
         paymentUrl = session.url!;
         stripeSessionId = session.id;
+        this.logger.log(`✅ Stripe session created for order: ${orderId}`);
       }
 
       // ✅ RAZORPAY FLOW
@@ -218,12 +228,14 @@ export class BuyerService {
         razorpayOrderId = razorOrder.id;
         status = 'initiated';
         paymentStatus = 'pending';
+        this.logger.log(`✅ Razorpay order created for order: ${orderId}`);
       }
 
       // ✅ COD FLOW
       else if (dto.paymentMethod === PaymentMethod.COD) {
         status = 'confirmed';
         paymentStatus = 'cod_pending';
+        this.logger.log(`✅ COD order confirmed for order: ${orderId}`);
       }
 
       const orderData: any = {
@@ -258,7 +270,7 @@ export class BuyerService {
       // Add Razorpay data only when present
       if (razorpayOrderId) {
         baseResponse.razorpayOrderId = razorpayOrderId;
-        baseResponse.razorpayKey = process.env.RAZORPAY_KEY_ID || null;
+        baseResponse.razorpayKey = this.configService.get('RAZORPAY_KEY_ID') || null;
       }
 
       return baseResponse as CheckoutResponse;
@@ -270,32 +282,65 @@ export class BuyerService {
 
   // ----------------- VERIFY RAZORPAY PAYMENT -----------------
   async verifyRazorpayPayment(orderId: string, paymentId: string, signature: string) {
-    const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET as string)
-      .update(`${orderId}|${paymentId}`)
-      .digest('hex');
+    try {
+      // Verify signature
+      const expectedSignature = crypto
+        .createHmac('sha256', this.configService.get('RAZORPAY_KEY_SECRET'))
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
 
-    if (expectedSignature !== signature) {
-      throw new BadRequestException('Invalid payment signature');
-    }
+      if (expectedSignature !== signature) {
+        this.logger.error(`❌ Invalid Razorpay signature for order: ${orderId}`);
+        throw new BadRequestException('Invalid payment signature');
+      }
 
-    const orders = await this.firestoreService.queryDocuments('orders', {
-      field: 'razorpayOrderId',
-      operator: '==',
-      value: orderId,
-    });
-
-    if (orders.length > 0) {
-      const order = orders[0];
-      await this.firestoreService.updateDocument('orders', order.id, {
-        paymentStatus: 'completed',
-        status: 'confirmed',
-        razorpayPaymentId: paymentId,
-        updatedAt: new Date(),
+      // Find order by razorpayOrderId
+      const orders = await this.firestoreService.queryDocuments('orders', {
+        field: 'razorpayOrderId',
+        operator: '==',
+        value: orderId,
       });
-    }
 
-    return { success: true };
+      if (orders.length === 0) {
+        this.logger.error(`❌ Order not found for Razorpay order ID: ${orderId}`);
+        throw new NotFoundException('Order not found');
+      }
+
+      const order = orders[0];
+
+      // ✅ Add transaction-safe Razorpay verification
+      await this.firestoreService.runTransaction(async (transaction) => {
+        const orderRef = this.firestoreService.getDocRef('orders', order.id);
+        
+        // Check if order is already processed
+        const orderDoc = await transaction.get(orderRef);
+        if (!orderDoc.exists) {
+          throw new NotFoundException('Order not found');
+        }
+
+        const orderData = orderDoc.data();
+        if (orderData.paymentStatus === 'completed') {
+          this.logger.warn(`⚠️ Order ${order.id} already processed`);
+          return;
+        }
+
+        // Update order with transaction safety
+        transaction.update(orderRef, {
+          paymentStatus: 'completed',
+          status: 'confirmed',
+          razorpayPaymentId: paymentId,
+          updatedAt: new Date(),
+        });
+      });
+
+      // ✅ Add consistent logging
+      this.logger.log(`✅ Payment confirmed for razorpay, order: ${order.id}`);
+      
+      return { success: true, orderId: order.id };
+    } catch (error) {
+      this.logger.error(`❌ Razorpay payment verification failed for order ${orderId}:`, error);
+      throw error;
+    }
   }
 
   // ----------------- STRIPE WEBHOOK -----------------
@@ -306,7 +351,7 @@ export class BuyerService {
       event = this.stripe.webhooks.constructEvent(
         rawBody,
         sig,
-        process.env.STRIPE_WEBHOOK_SECRET as string,
+        this.configService.get('STRIPE_WEBHOOK_SECRET'),
       );
     } catch (err: any) {
       this.logger.error(`❌ Stripe webhook verification failed: ${err.message}`);
@@ -328,11 +373,36 @@ export class BuyerService {
 
         if (orders.length > 0) {
           const order = orders[0];
-          await this.firestoreService.updateDocument('orders', order.id, {
-            paymentStatus: 'completed',
-            status: 'confirmed',
-            updatedAt: new Date(),
+
+          // ✅ Add transaction-safe Stripe verification
+          await this.firestoreService.runTransaction(async (transaction) => {
+            const orderRef = this.firestoreService.getDocRef('orders', order.id);
+            
+            // Check if order is already processed
+            const orderDoc = await transaction.get(orderRef);
+            if (!orderDoc.exists) {
+              throw new NotFoundException('Order not found');
+            }
+
+            const orderData = orderDoc.data();
+            if (orderData.paymentStatus === 'completed') {
+              this.logger.warn(`⚠️ Order ${order.id} already processed`);
+              return;
+            }
+
+            // Update order with transaction safety
+            transaction.update(orderRef, {
+              paymentStatus: 'completed',
+              status: 'confirmed',
+              stripePaymentId: session.payment_intent,
+              updatedAt: new Date(),
+            });
           });
+
+          // ✅ Add consistent logging
+          this.logger.log(`✅ Payment confirmed for stripe, order: ${order.id}`);
+        } else {
+          this.logger.error(`❌ Order not found for Stripe session: ${stripeSessionId}`);
         }
 
         break;

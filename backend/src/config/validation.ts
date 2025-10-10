@@ -18,10 +18,18 @@ export const validationSchema = Joi.object({
   SPEECH_TO_TEXT_ENABLED: Joi.boolean().default(true),
   TEXT_TO_SPEECH_ENABLED: Joi.boolean().default(true),
   
+  // Payment Gateway Configuration
   RAZORPAY_KEY_ID: Joi.string().required(),
   RAZORPAY_KEY_SECRET: Joi.string().required(),
+  STRIPE_SECRET_KEY: Joi.string().required(),
+  STRIPE_WEBHOOK_SECRET: Joi.string().required(),
+  
+  // External API Keys
   REMOVE_BG_API_KEY: Joi.string().required(),
   CANVA_API_KEY: Joi.string().required(),
+  
+  // Authentication
+  JWT_SECRET: Joi.string().required(),
   
   FRONTEND_URL: Joi.string().uri().default('http://localhost:3000'),
 });

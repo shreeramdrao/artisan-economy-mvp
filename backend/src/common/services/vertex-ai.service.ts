@@ -73,31 +73,55 @@ Provide the response in this exact JSON format:
   }
 }`;
 
-      const result = await this.model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
+      // ✅ Add timeout configuration to prevent hanging requests
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
-      let text = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      this.logger.log('Vertex AI response received for polishStory');
+      try {
+        const result = await this.model.generateContent(
+          { 
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 1024,
+            }
+          },
+          { signal: controller.signal }
+        );
 
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[0]);
-          return {
-            polishedStory: parsed.polishedStory || rawStory,
-            translations: {
-              en: parsed.translations?.en || rawStory,
-              hi: parsed.translations?.hi || rawStory,
-              kn: parsed.translations?.kn || rawStory,
-            },
-          };
-        } catch (parseError) {
-          this.logger.error('Error parsing Vertex AI JSON response:', parseError);
+        clearTimeout(timeout);
+        let text = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        this.logger.log('Vertex AI response received for polishStory');
+
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            const parsed = JSON.parse(jsonMatch[0]);
+            return {
+              polishedStory: parsed.polishedStory || rawStory,
+              translations: {
+                en: parsed.translations?.en || rawStory,
+                hi: parsed.translations?.hi || rawStory,
+                kn: parsed.translations?.kn || rawStory,
+              },
+            };
+          } catch (parseError) {
+            this.logger.error('Error parsing Vertex AI JSON response:', parseError);
+          }
         }
-      }
 
-      return { polishedStory: rawStory, translations: { en: rawStory, hi: rawStory, kn: rawStory } };
+        return { polishedStory: rawStory, translations: { en: rawStory, hi: rawStory, kn: rawStory } };
+      } catch (error) {
+        clearTimeout(timeout);
+        if (error.name === 'AbortError') {
+          this.logger.warn('[Vertex AI Warning] Request timed out after 30 seconds');
+          throw new Error('Vertex AI service timeout');
+        }
+        this.logger.warn(`[Vertex AI Warning] ${error.message}`);
+        throw new Error('Vertex AI service failure');
+      }
     } catch (error) {
-      this.logger.error('Error polishing story with Vertex AI:', error);
+      this.logger.warn(`[Vertex AI Warning] ${error.message}`);
       return { polishedStory: rawStory, translations: { en: rawStory, hi: rawStory, kn: rawStory } };
     }
   }
@@ -133,34 +157,58 @@ Provide response in JSON:
   "reasoning": "..."
 }`;
 
-      const result = await this.model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
+      // ✅ Add timeout configuration to prevent hanging requests
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
-      let text = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      try {
+        const result = await this.model.generateContent(
+          { 
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 1024,
+            }
+          },
+          { signal: controller.signal }
+        );
 
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[0]);
-          return {
-            conservative: Math.round(parsed.conservative || materialCost * 2),
-            recommended: Math.round(parsed.recommended || materialCost * 3),
-            premium: Math.round(parsed.premium || materialCost * 4),
-            reasoning: parsed.reasoning || 'Based on material cost and labor hours',
-          };
-        } catch (err) {
-          this.logger.error('Error parsing price JSON:', err);
+        clearTimeout(timeout);
+        let text = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+
+        if (jsonMatch) {
+          try {
+            const parsed = JSON.parse(jsonMatch[0]);
+            return {
+              conservative: Math.round(parsed.conservative || materialCost * 2),
+              recommended: Math.round(parsed.recommended || materialCost * 3),
+              premium: Math.round(parsed.premium || materialCost * 4),
+              reasoning: parsed.reasoning || 'Based on material cost and labor hours',
+            };
+          } catch (err) {
+            this.logger.error('Error parsing price JSON:', err);
+          }
         }
-      }
 
-      const baseCost = materialCost + hours * 500;
-      return {
-        conservative: Math.round(baseCost * 1.5),
-        recommended: Math.round(baseCost * 2),
-        premium: Math.round(baseCost * 2.5),
-        reasoning: 'Based on material cost and standard labor rates',
-      };
+        const baseCost = materialCost + hours * 500;
+        return {
+          conservative: Math.round(baseCost * 1.5),
+          recommended: Math.round(baseCost * 2),
+          premium: Math.round(baseCost * 2.5),
+          reasoning: 'Based on material cost and standard labor rates',
+        };
+      } catch (error) {
+        clearTimeout(timeout);
+        if (error.name === 'AbortError') {
+          this.logger.warn('[Vertex AI Warning] Request timed out after 30 seconds');
+          throw new Error('Vertex AI service timeout');
+        }
+        this.logger.warn(`[Vertex AI Warning] ${error.message}`);
+        throw new Error('Vertex AI service failure');
+      }
     } catch (error) {
-      this.logger.error('Error suggesting price with Vertex AI:', error);
+      this.logger.warn(`[Vertex AI Warning] ${error.message}`);
       const baseCost = (data.materialCost ?? 0) + (data.hours ?? 0) * 500;
       return {
         conservative: Math.round(baseCost * 1.5),
@@ -175,10 +223,36 @@ Provide response in JSON:
   async generateContent(prompt: string): Promise<any> {
     try {
       this.checkInitialized();
-      const result = await this.model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
-      return result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      
+      // ✅ Add timeout configuration to prevent hanging requests
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+      try {
+        const result = await this.model.generateContent(
+          { 
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 1024,
+            }
+          },
+          { signal: controller.signal }
+        );
+        
+        clearTimeout(timeout);
+        return result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      } catch (error) {
+        clearTimeout(timeout);
+        if (error.name === 'AbortError') {
+          this.logger.warn('[Vertex AI Warning] Request timed out after 30 seconds');
+          throw new Error('Vertex AI service timeout');
+        }
+        this.logger.warn(`[Vertex AI Warning] ${error.message}`);
+        throw new Error('Vertex AI service failure');
+      }
     } catch (error) {
-      this.logger.error('Error generating content with Vertex AI:', error);
+      this.logger.warn(`[Vertex AI Warning] ${error.message}`);
       throw error;
     }
   }
@@ -203,35 +277,60 @@ Return JSON:
   "hashtags": ["#tag1", "#tag2", ...]
 }`;
 
-      const result = await this.model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
-      let text = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      // ✅ Add timeout configuration to prevent hanging requests
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          return JSON.parse(jsonMatch[0]);
-        } catch (err) {
-          this.logger.error('Error parsing caption JSON:', err);
+      try {
+        const result = await this.model.generateContent(
+          { 
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 1024,
+            }
+          },
+          { signal: controller.signal }
+        );
+        
+        clearTimeout(timeout);
+        let text = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            return JSON.parse(jsonMatch[0]);
+          } catch (err) {
+            this.logger.error('Error parsing caption JSON:', err);
+          }
         }
-      }
 
-      return {
-        caption: `Handcrafted ${title} - A piece of Indian heritage 🪔✨`,
-        hashtags: [
-          '#HandmadeInIndia',
-          '#ArtisanCrafts',
-          '#IndianHeritage',
-          '#SupportLocal',
-          '#TraditionalArt',
-          '#MadeWithLove',
-          '#CulturalCrafts',
-          '#IndianArtisans',
-          '#Sustainable',
-          '#UniqueGifts',
-        ],
-      };
+        return {
+          caption: `Handcrafted ${title} - A piece of Indian heritage 🪔✨`,
+          hashtags: [
+            '#HandmadeInIndia',
+            '#ArtisanCrafts',
+            '#IndianHeritage',
+            '#SupportLocal',
+            '#TraditionalArt',
+            '#MadeWithLove',
+            '#CulturalCrafts',
+            '#IndianArtisans',
+            '#Sustainable',
+            '#UniqueGifts',
+          ],
+        };
+      } catch (error) {
+        clearTimeout(timeout);
+        if (error.name === 'AbortError') {
+          this.logger.warn('[Vertex AI Warning] Request timed out after 30 seconds');
+          throw new Error('Vertex AI service timeout');
+        }
+        this.logger.warn(`[Vertex AI Warning] ${error.message}`);
+        throw new Error('Vertex AI service failure');
+      }
     } catch (error) {
-      this.logger.error('Error generating Instagram caption:', error);
+      this.logger.warn(`[Vertex AI Warning] ${error.message}`);
       return { caption: `Beautiful ${title} - Handcrafted 🎨`, hashtags: ['#Handmade', '#ArtisanCrafts', '#MadeInIndia'] };
     }
   }

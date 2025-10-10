@@ -113,7 +113,7 @@ export default function SellerProfilePage() {
                 src={
                   avatarFile
                     ? URL.createObjectURL(avatarFile)
-                    : profile.avatarUrl || '/images/default-avatar.png'
+                    : profile.avatarUrl || '/images/default-avatar.svg'
                 }
                 alt="Avatar"
                 className="w-20 h-20 rounded-full border object-cover"
@@ -188,7 +188,7 @@ export default function SellerProfilePage() {
           <div className="space-y-4 text-gray-700">
             <div className="flex items-center gap-4">
               <img
-                src={profile.avatarUrl || '/images/default-avatar.png'}
+                src={profile.avatarUrl || '/images/default-avatar.svg'}
                 alt="Avatar"
                 className="w-20 h-20 rounded-full border object-cover"
               />

@@ -8,7 +8,7 @@ import {
   ReactNode,
 } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import api from '@/lib/api'
+import { authApi } from '@/lib/api'
 
 type Role = 'seller' | 'buyer'
 
@@ -35,7 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
 
-  // ✅ Auto-load from cookies (authUser) on first mount
+  // ✅ Auto-load from cookies (authUser) on first mount with error handling
   useEffect(() => {
     const loadUser = async () => {
       try {
@@ -46,17 +46,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(parsed)
         }
 
-        // Optional: verify token via backend (ensures JWT still valid)
+        // Verify token via backend (ensures JWT still valid)
         const tokenCookie = getCookie('token')
-        if (tokenCookie) {
-          const res = await api.post('/auth/verify', { token: tokenCookie })
-          if (!res.data.valid) {
-            console.warn('JWT expired, forcing logout...')
-            logout()
-          }
+        if (!tokenCookie) {
+          // No token found, logout user
+          logout()
+          return
+        }
+
+        const res = await authApi.verify(tokenCookie)
+        if (!res.valid) {
+          console.warn('JWT expired or invalid, forcing logout...')
+          logout()
         }
       } catch (err) {
-        console.error('Failed to load user from cookie:', err)
+        console.error('Auth error during user load:', err)
         logout()
       } finally {
         setLoading(false)
@@ -73,30 +77,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return match ? match[2] : null
   }
 
-  // ✅ Save user → cookie + localStorage
+  // ✅ Save user → cookie only (no localStorage for security, no JWT token storage)
   const login = (userData: User) => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('authUser', JSON.stringify(userData))
-      document.cookie = `authUser=${encodeURIComponent(
-        JSON.stringify(userData)
-      )}; path=/; SameSite=None; Secure`
-    }
-    setUser(userData)
+    try {
+      if (typeof window !== 'undefined') {
+        // Only store user data (email, role, name, userId) - NEVER store JWT token
+        const safeUserData = {
+          userId: userData.userId,
+          name: userData.name,
+          email: userData.email,
+          role: userData.role,
+        }
+        
+        // Set the authUser cookie (non-sensitive data only)
+        document.cookie = `authUser=${encodeURIComponent(
+          JSON.stringify(safeUserData)
+        )}; path=/; SameSite=Lax; Secure; max-age=${7 * 24 * 60 * 60}` // 7 days
+        
+        // Dispatch custom event for cross-tab sync
+        window.dispatchEvent(new CustomEvent('authChanged'))
+      }
+      
+      setUser(userData)
 
-    // Redirect based on role
-    if (userData.role === 'seller') {
-      router.push('/seller')
-    } else {
-      router.push('/buyer')
+      // Redirect based on role
+      if (userData.role === 'seller') {
+        router.push('/seller')
+      } else {
+        router.push('/buyer')
+      }
+    } catch (err) {
+      console.error('Auth error during login:', err)
+      logout()
     }
   }
 
-  // ✅ Logout → clear all data
+  // ✅ Logout → clear all cookies securely (no localStorage)
   const logout = () => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('authUser')
-      document.cookie = 'authUser=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None; Secure'
-      document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None; Secure'
+      // Clear authUser cookie securely
+      document.cookie = 'authUser=; Max-Age=0; path=/; Secure; SameSite=Lax'
+      // Clear token cookie securely (though it's httpOnly, this ensures cleanup)
+      document.cookie = 'token=; Max-Age=0; path=/; Secure; SameSite=Lax'
+      
+      // Dispatch custom event for cross-tab sync
+      window.dispatchEvent(new CustomEvent('authChanged'))
     }
 
     setUser(null)
@@ -111,19 +136,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // ✅ Sync user changes across tabs
+  // ✅ Sync user changes across tabs via custom events (no localStorage)
   useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'authUser') {
-        if (e.newValue) {
-          setUser(JSON.parse(e.newValue))
-        } else {
-          setUser(null)
-        }
+    const handleAuthChange = () => {
+      // Reload user from cookies when auth changes in other tabs
+      const cookieUser = getCookie('authUser')
+      if (cookieUser) {
+        const parsed = JSON.parse(decodeURIComponent(cookieUser))
+        setUser(parsed)
+      } else {
+        setUser(null)
       }
     }
-    window.addEventListener('storage', handleStorageChange)
-    return () => window.removeEventListener('storage', handleStorageChange)
+
+    // Listen for custom auth events
+    window.addEventListener('authChanged', handleAuthChange)
+    return () => window.removeEventListener('authChanged', handleAuthChange)
   }, [])
 
   return (

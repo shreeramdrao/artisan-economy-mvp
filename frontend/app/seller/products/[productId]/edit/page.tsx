@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+
+// Force dynamic rendering for client-dependent functionality
+export const dynamic = 'force-dynamic'
 import { sellerApi } from '@/lib/api'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'

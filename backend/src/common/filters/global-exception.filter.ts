@@ -9,51 +9,58 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 
-@Catch(HttpException)
-export class HttpExceptionFilter implements ExceptionFilter {
-  private readonly logger = new Logger(HttpExceptionFilter.name);
+@Catch()
+export class GlobalExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(GlobalExceptionFilter.name);
 
   constructor(private readonly configService: ConfigService) {}
 
-  catch(exception: HttpException, host: ArgumentsHost) {
+  catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
-    const status = exception.getStatus();
-    const exceptionResponse = exception.getResponse();
     const isProduction = this.configService.get('NODE_ENV') === 'production';
 
-    const error =
-      typeof exceptionResponse === 'string'
-        ? { message: exceptionResponse }
-        : (exceptionResponse as object);
+    let status = HttpStatus.INTERNAL_SERVER_ERROR;
+    let message = 'Internal server error';
+
+    // Handle different types of exceptions
+    if (exception instanceof HttpException) {
+      status = exception.getStatus();
+      const exceptionResponse = exception.getResponse();
+      message = typeof exceptionResponse === 'string' 
+        ? exceptionResponse 
+        : (exceptionResponse as any)?.message || exception.message;
+    } else if (exception instanceof Error) {
+      message = exception.message;
+    }
 
     // Log detailed error information (server-side only)
     this.logger.error(
-      `HTTP Exception: ${request.method} ${request.url}`,
+      `Unhandled Exception: ${request.method} ${request.url}`,
       JSON.stringify({
-        ...error,
+        message: exception instanceof Error ? exception.message : 'Unknown error',
         statusCode: status,
         timestamp: new Date().toISOString(),
         path: request.url,
         // Include stack trace in logs for debugging (not sent to client)
-        stack: exception.stack,
+        stack: exception instanceof Error ? exception.stack : undefined,
       }),
     );
 
     // Secure response - never expose stack traces in production
     const secureResponse = {
       statusCode: status,
-      message: exception.message || 'Internal server error',
+      message: message,
       timestamp: new Date().toISOString(),
       path: request.url,
     };
 
     // In development, include additional error details
-    if (!isProduction) {
+    if (!isProduction && exception instanceof Error) {
       Object.assign(secureResponse, {
-        ...error,
         stack: exception.stack,
+        name: exception.name,
       });
     }
 

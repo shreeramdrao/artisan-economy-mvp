@@ -8,6 +8,7 @@ import { FirestoreService } from '../common/services/firestore.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 
 export interface JwtPayload {
@@ -23,6 +24,7 @@ export class AuthService {
   constructor(
     private readonly firestoreService: FirestoreService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   // ------------------ REGISTER ------------------
@@ -63,9 +65,12 @@ export class AuthService {
     await this.firestoreService.createDocument(collection, dto.email, userData);
     this.logger.log(`${dto.role} registered successfully: ${dto.email}`);
 
-    // 🎟️ Generate JWT Token
+    // 🎟️ Generate JWT Token with proper expiration and security
     const payload: JwtPayload = { userId: userData.id, email: userData.email, role: userData.role };
-    const token = this.jwtService.sign(payload);
+    const token = this.jwtService.sign(payload, {
+      secret: this.configService.get('JWT_SECRET'),
+      expiresIn: '7d', // 7 days expiration
+    });
 
     return {
       status: 'success',
@@ -97,9 +102,12 @@ export class AuthService {
 
     this.logger.log(`${dto.role} logged in successfully: ${dto.email}`);
 
-    // 🎟️ Generate JWT Token
+    // 🎟️ Generate JWT Token with proper expiration and security
     const payload: JwtPayload = { userId: user.id, email: user.email, role: user.role };
-    const token = this.jwtService.sign(payload);
+    const token = this.jwtService.sign(payload, {
+      secret: this.configService.get('JWT_SECRET'),
+      expiresIn: '7d', // 7 days expiration
+    });
 
     return {
       status: 'success',
@@ -117,7 +125,9 @@ export class AuthService {
   // ------------------ VERIFY TOKEN ------------------
   async verifyToken(token: string): Promise<{ valid: boolean; decoded?: JwtPayload; message?: string }> {
     try {
-      const decoded = this.jwtService.verify<JwtPayload>(token);
+      const decoded = this.jwtService.verify<JwtPayload>(token, {
+        secret: this.configService.get('JWT_SECRET'),
+      });
       return { valid: true, decoded };
     } catch (err) {
       this.logger.warn(`❌ Invalid or expired JWT: ${err.message}`);

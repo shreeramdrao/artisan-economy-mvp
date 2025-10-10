@@ -6,8 +6,11 @@ import {
   HttpStatus,
   BadRequestException,
   Res,
+  UseGuards,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -16,11 +19,15 @@ import { Response } from 'express';
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {}
 
   // ------------------ REGISTER ------------------
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
+  @UseGuards(ThrottlerGuard)
   @ApiOperation({ summary: 'Register as Buyer or Seller (returns JWT token + cookies)' })
   @ApiResponse({ status: 201, description: 'User registered successfully' })
   async register(
@@ -32,19 +39,20 @@ export class AuthController {
       throw new BadRequestException('Role must be either buyer or seller');
     }
 
-    // ✅ Perform registration logic
     const result = await this.authService.register(registerDto);
 
-    // ✅ Set secure HTTP-only JWT cookie (backend use only)
+    const isProd = this.configService.get<string>('NODE_ENV') === 'production';
+
+    // ✅ Secure HTTP-only JWT cookie
     res.cookie('token', result.token, {
-      httpOnly: true, // JS cannot access this
-      secure: process.env.NODE_ENV === 'production', // ✅ auto adjusts
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      httpOnly: true,
+      secure: isProd, // HTTPS only in production
+      sameSite: isProd ? 'lax' : 'strict', // use lowercase values only ✅
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
-    // ✅ Set a readable cookie for frontend (non-sensitive)
+    // ✅ Readable cookie for frontend
     res.cookie(
       'authUser',
       JSON.stringify({
@@ -54,14 +62,14 @@ export class AuthController {
         role: result.user.role,
       }),
       {
-        httpOnly: false, // Frontend can access this
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        httpOnly: false,
+        secure: isProd,
+        sameSite: isProd ? 'lax' : 'strict',
         path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
       },
     );
 
-    // ✅ Return response payload
     return {
       status: 'success',
       message: result.message,
@@ -73,6 +81,7 @@ export class AuthController {
   // ------------------ LOGIN ------------------
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
   @ApiOperation({ summary: 'Login as Buyer or Seller (returns JWT token + cookies)' })
   @ApiResponse({ status: 200, description: 'User logged in successfully' })
   async login(
@@ -80,17 +89,18 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.login(loginDto);
+    const isProd = this.configService.get<string>('NODE_ENV') === 'production';
 
-    // ✅ Set secure HTTP-only JWT cookie
+    // ✅ Secure HTTP-only JWT cookie
     res.cookie('token', result.token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'lax' : 'strict', // ✅ lowercase only
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    // ✅ Set a readable cookie for frontend
+    // ✅ Frontend-readable cookie
     res.cookie(
       'authUser',
       JSON.stringify({
@@ -101,9 +111,10 @@ export class AuthController {
       }),
       {
         httpOnly: false,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        secure: isProd,
+        sameSite: isProd ? 'lax' : 'strict', // ✅ lowercase only
         path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
       },
     );
 
@@ -121,15 +132,18 @@ export class AuthController {
   @ApiOperation({ summary: 'Logout and clear all cookies' })
   @ApiResponse({ status: 200, description: 'User logged out successfully' })
   async logout(@Res({ passthrough: true }) res: Response) {
+    const isProd = process.env.NODE_ENV === 'production';
+
     res.clearCookie('token', {
       path: '/',
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'lax' : 'strict',
     });
+
     res.clearCookie('authUser', {
       path: '/',
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'lax' : 'strict',
     });
 
     return { status: 'success', message: 'Logged out successfully' };

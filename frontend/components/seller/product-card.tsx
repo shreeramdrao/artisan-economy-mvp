@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Card } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { formatPrice } from '@/lib/utils'
@@ -15,6 +16,7 @@ interface ProductCardProps {
   imageUrl?: string
   rating?: number
   onLikeChange?: (productId: string, liked: boolean) => void
+  loading?: boolean
 }
 
 export default function ProductCard({
@@ -23,9 +25,10 @@ export default function ProductCard({
   sellerName = 'Artisan',
   location = 'India',
   price,
-  imageUrl = '/placeholder.png',
+  imageUrl = '/images/fallback.svg',
   rating = 4.5,
   onLikeChange,
+  loading = false,
 }: ProductCardProps) {
   const { toast } = useToast()
   const [liked, setLiked] = useState(false)
@@ -91,15 +94,25 @@ export default function ProductCard({
     return <div className="text-sm text-yellow-400">{stars}</div>
   }
 
+  // ✅ Add skeleton loader for product cards
+  if (loading) {
+    return (
+      <Card className="overflow-hidden">
+        <div className="animate-pulse h-64 bg-gray-200 rounded-lg" />
+      </Card>
+    )
+  }
+
   return (
     <Card className="overflow-hidden hover:shadow-md transition relative">
       <Link href={`/buyer/product/${productId}`} className="block">
         <div className="aspect-square bg-gray-100 relative">
-          <img
-            src={imageUrl}
+          <Image
+            src={imageUrl || '/images/fallback.svg'}
             alt={title}
-            className="w-full h-full object-cover"
-            loading="lazy"
+            width={300}
+            height={300}
+            className="object-cover rounded-lg"
           />
 
           {/* ❤️ Heart button */}

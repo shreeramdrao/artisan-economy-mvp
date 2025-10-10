@@ -66,4 +66,33 @@
   .hero-gradient {
     @apply bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent;
   }
+
+  /* ✅ Perfect product card alignment utilities */
+  .product-card-grid {
+    @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 place-items-stretch;
+  }
+
+  .product-card-container {
+    @apply h-full flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:shadow-lg hover:shadow-gray-200/50 dark:hover:shadow-gray-900/50 transition-all duration-300 bg-white dark:bg-gray-800 hover:-translate-y-1;
+  }
+
+  .product-card-image {
+    @apply aspect-[4/3] w-full overflow-hidden bg-gray-100 dark:bg-gray-700 relative;
+  }
+
+  .product-card-content {
+    @apply p-4 flex flex-col justify-between flex-1 min-h-[140px];
+  }
+
+  .product-card-title {
+    @apply text-lg font-semibold line-clamp-2 text-gray-900 dark:text-gray-100 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors leading-tight min-h-[2.5rem] max-h-[2.5rem];
+  }
+
+  .product-card-seller {
+    @apply text-sm text-gray-500 dark:text-gray-400 truncate min-h-[1.25rem];
+  }
+
+  .product-card-bottom {
+    @apply flex items-center justify-between min-h-[2rem];
+  }
 }

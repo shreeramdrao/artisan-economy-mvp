@@ -28,12 +28,21 @@ export default () => ({
     keySecret: process.env.RAZORPAY_KEY_SECRET,
   },
   
+  stripe: {
+    secretKey: process.env.STRIPE_SECRET_KEY,
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+  },
+  
   removeBg: {
     apiKey: process.env.REMOVE_BG_API_KEY,
   },
   
   canva: {
     apiKey: process.env.CANVA_API_KEY,
+  },
+  
+  jwt: {
+    secret: process.env.JWT_SECRET,
   },
   
   frontend: {

@@ -6,6 +6,9 @@ import { formatPrice } from '@/lib/utils'
 import { useCart } from '@/context/cart-context'
 import { useRouter } from 'next/navigation'
 
+// Force dynamic rendering for client-dependent functionality
+export const dynamic = 'force-dynamic'
+
 export default function CartPage() {
   const { cart, removeFromCart, clearCart } = useCart()
   const router = useRouter()
@@ -45,7 +48,7 @@ export default function CartPage() {
                   {/* ✅ Product Image */}
                   <div className="w-16 h-16 bg-gray-100 rounded overflow-hidden">
                     <img
-                      src={item.imageUrl || '/placeholder.png'}
+                      src={item.imageUrl || '/images/fallback.svg'}
                       alt={item.title || 'Untitled'}
                       className="w-full h-full object-cover"
                     />

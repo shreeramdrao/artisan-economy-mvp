@@ -1,5 +1,6 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { AiService } from './ai.service';
 import { StoryPolishDto } from './dto/story-polish.dto';
 import { PriceSuggestDto } from './dto/price-suggest.dto';
@@ -12,6 +13,7 @@ export class AiController {
 
   @Post('story-polish')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
   @ApiOperation({ summary: 'Polish and translate product story' })
   @ApiResponse({
     status: 200,
@@ -23,6 +25,7 @@ export class AiController {
 
   @Post('price-suggest')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
   @ApiOperation({ summary: 'Get AI-powered price suggestions' })
   @ApiResponse({
     status: 200,
@@ -34,6 +37,7 @@ export class AiController {
 
   @Post('image-enhance')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
   @ApiOperation({ summary: 'Enhance product image' })
   @ApiResponse({
     status: 200,
@@ -45,6 +49,7 @@ export class AiController {
 
   @Post('transcribe')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
   @ApiOperation({ summary: 'Transcribe audio to text' })
   @ApiResponse({
     status: 200,
@@ -56,6 +61,7 @@ export class AiController {
 
   @Post('text-to-speech')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
   @ApiOperation({ summary: 'Convert text to speech' })
   @ApiResponse({
     status: 200,
@@ -67,6 +73,7 @@ export class AiController {
 
   @Post('generate-instagram-caption')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
   @ApiOperation({ summary: 'Generate Instagram caption for product' })
   @ApiResponse({
     status: 200,

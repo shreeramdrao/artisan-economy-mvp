@@ -61,8 +61,8 @@ export class FirestoreService {
       const doc = await this.firestore.collection(collection).doc(documentId).get();
       return { id: documentId, ...doc.data() };
     } catch (error) {
-      this.logger.error(`Error creating document in ${collection}:`, error);
-      throw error;
+      this.logger.error(`Failed to create Firestore document ${collection}/${documentId}:`, error);
+      throw new Error(`Firestore create failed for ${collection}/${documentId}: ${error.message}`);
     }
   }
 
@@ -111,11 +111,8 @@ export class FirestoreService {
 
       return await this.getDocument(collection, documentId);
     } catch (error) {
-      this.logger.error(
-        `Error updating document ${documentId} in ${collection}:`,
-        error,
-      );
-      throw error;
+      this.logger.error(`Failed to update Firestore document ${collection}/${documentId}:`, error);
+      throw new Error(`Firestore update failed for ${collection}/${documentId}: ${error.message}`);
     }
   }
 
@@ -131,11 +128,8 @@ export class FirestoreService {
       this.logger.log(`Document deleted: ${collection}/${documentId}`);
       return { success: true };
     } catch (error) {
-      this.logger.error(
-        `Error deleting document ${documentId} from ${collection}:`,
-        error,
-      );
-      throw error;
+      this.logger.error(`Failed to delete Firestore document ${collection}/${documentId}:`, error);
+      throw new Error(`Firestore delete failed for ${collection}/${documentId}: ${error.message}`);
     }
   }
 
@@ -172,11 +166,8 @@ export class FirestoreService {
         };
       });
     } catch (error) {
-      this.logger.error(
-        `Error querying documents from ${collection}:`,
-        error,
-      );
-      throw error;
+      this.logger.error(`Failed to query Firestore documents from ${collection}:`, error);
+      throw new Error(`Firestore query failed for ${collection}: ${error.message}`);
     }
   }
 
@@ -199,8 +190,8 @@ export class FirestoreService {
         `Incremented ${field} by ${value} in ${collection}/${documentId}`,
       );
     } catch (error) {
-      this.logger.error(`Error incrementing field ${field}:`, error);
-      throw error;
+      this.logger.error(`Failed to increment Firestore field ${field} in ${collection}/${documentId}:`, error);
+      throw new Error(`Firestore increment failed for ${collection}/${documentId}: ${error.message}`);
     }
   }
 
@@ -244,11 +235,8 @@ export class FirestoreService {
       });
       this.logger.log(`Document set: ${collection}/${documentId}`);
     } catch (error) {
-      this.logger.error(
-        `Error setting document ${documentId} in ${collection}:`,
-        error,
-      );
-      throw error;
+      this.logger.error(`Failed to set Firestore document ${collection}/${documentId}:`, error);
+      throw new Error(`Firestore set failed for ${collection}/${documentId}: ${error.message}`);
     }
   }
 
@@ -284,5 +272,25 @@ export class FirestoreService {
       );
       throw error;
     }
+  }
+
+  // ------------------ TRANSACTION METHODS ------------------
+  async runTransaction<T>(updateFunction: (transaction: any) => Promise<T>): Promise<T> {
+    try {
+      this.checkInitialized();
+      
+      return await this.firestore.runTransaction(async (transaction) => {
+        return await updateFunction(transaction);
+      });
+    } catch (error) {
+      this.logger.error('Transaction failed:', error);
+      throw new Error(`Firestore transaction failed: ${error.message}`);
+    }
+  }
+
+  // ------------------ UTILITY METHODS ------------------
+  getDocRef(collection: string, documentId: string) {
+    this.checkInitialized();
+    return this.firestore.collection(collection).doc(documentId);
   }
 }

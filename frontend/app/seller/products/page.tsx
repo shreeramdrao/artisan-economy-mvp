@@ -1,6 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+
+// Force dynamic rendering for client-dependent functionality
+export const dynamic = 'force-dynamic'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
@@ -12,7 +15,7 @@ export default function SellerProducts() {
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fallbackImg = '/placeholder.png'
+  const fallbackImg = '/images/fallback.svg'
   const { user, isAuthenticated } = useAuth() // ✅ get logged-in user
 
   useEffect(() => {

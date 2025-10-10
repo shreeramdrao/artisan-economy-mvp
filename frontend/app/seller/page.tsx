@@ -8,6 +8,9 @@ import { formatPrice } from '@/lib/utils'
 import { sellerApi } from '@/lib/api'
 import { useAuth } from '@/context/auth-context' // ✅ Import Auth context
 
+// Force dynamic rendering for client-dependent functionality
+export const dynamic = 'force-dynamic'
+
 export default function SellerDashboard() {
   const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)

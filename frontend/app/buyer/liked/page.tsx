@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { buyerApi } from '@/lib/api'
-import ProductCard from '@/components/seller/product-card'
+import ProductCard from '@/components/buyer/product-card'
 import { Loader2 } from 'lucide-react'
 
 interface Product {
@@ -75,7 +75,7 @@ export default function LikedProductsPage() {
           No liked products yet. Click the ❤️ on a product to save it here!
         </p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 place-items-stretch">
           {products.map((product) => (
             <ProductCard
               key={product.id}
@@ -88,7 +88,7 @@ export default function LikedProductsPage() {
                 product.images?.polished ||
                 product.images?.enhanced ||
                 product.images?.original ||
-                '/placeholder.png'
+                '/images/fallback.svg'
               }
               rating={product.rating || 4.5}
             />

@@ -2,6 +2,9 @@
 
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+
+// Force dynamic rendering for client-dependent functionality
+export const dynamic = 'force-dynamic'
 import { authApi } from '@/lib/api'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'

@@ -2,9 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+
+// Force dynamic rendering for client-dependent functionality
+export const dynamic = 'force-dynamic'
 import { buyerApi } from '@/lib/api'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import ProductCard from '@/components/buyer/product-card'
 import Link from 'next/link'
 import { formatPrice } from '@/lib/utils'
 
@@ -16,7 +20,7 @@ export default function ArtisanProductsPage() {
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fallbackImg = '/images/default-avatar.png'
+  const fallbackImg = '/images/default-avatar.svg'
 
   useEffect(() => {
     async function fetchData() {
@@ -69,45 +73,24 @@ export default function ArtisanProductsPage() {
 
       {/* Artisan Products */}
       {products.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 place-items-stretch">
           {products.map((product) => (
-            <Card
+            <ProductCard
               key={product.productId}
-              className="overflow-hidden hover:shadow-lg transition"
-            >
-              <div className="aspect-square bg-gray-100">
-                <img
-                  src={product.imageUrl || fallbackImg}
-                  alt={product.title}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div className="p-4">
-                <h3 className="font-semibold text-lg mb-1">{product.title}</h3>
-                <p className="text-sm text-gray-600 mb-2">{product.category}</p>
-                <div className="text-xl font-bold text-orange-600 mb-3">
-                  {formatPrice(product.price)}
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span
-                    className={`text-xs px-2 py-1 rounded ${
-                      product.status === 'published'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
-                    {product.status}
-                  </span>
-
-                  <Link href={`/buyer/product/${product.productId}`}>
-                    <Button size="sm" variant="outline">
-                      View
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </Card>
+              productId={product.productId}
+              title={product.title || 'Untitled Product'}
+              sellerName={artisan.name || 'Artisan'}
+              location={artisan.location || 'India'}
+              price={product.price || 0}
+              imageUrl={
+                product.images?.polished ||
+                product.images?.enhanced ||
+                product.images?.original ||
+                product.imageUrl ||
+                '/images/fallback.svg'
+              }
+              rating={product.rating || 4.5}
+            />
           ))}
         </div>
       ) : (

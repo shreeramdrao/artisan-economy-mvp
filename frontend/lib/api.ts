@@ -2,8 +2,10 @@ import axios from 'axios'
 import type { SellerPaymentResponse } from '@/types/seller'
 
 /* ----------------- ✅ Base URL ----------------- */
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api'
+if (!process.env.NEXT_PUBLIC_BACKEND_URL) {
+  throw new Error('Missing NEXT_PUBLIC_BACKEND_URL environment variable');
+}
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 /* ----------------- ✅ Axios Instance ----------------- */
 const api = axios.create({
@@ -80,6 +82,11 @@ export const authApi = {
   logout: async () => {
     const res = await api.post('/auth/logout')
     clearAuthCookies()
+    return res.data
+  },
+
+  verify: async (token: string) => {
+    const res = await api.post('/auth/verify', { token })
     return res.data
   },
 }

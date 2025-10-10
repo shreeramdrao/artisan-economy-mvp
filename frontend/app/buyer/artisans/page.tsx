@@ -1,6 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+
+// Force dynamic rendering for client-dependent functionality
+export const dynamic = 'force-dynamic'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { buyerApi } from '@/lib/api'
@@ -10,7 +13,7 @@ export default function ArtisansPage() {
   const [artisans, setArtisans] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fallbackImg = '/images/default-avatar.png'
+  const fallbackImg = '/images/default-avatar.svg'
 
   useEffect(() => {
     async function fetchArtisans() {

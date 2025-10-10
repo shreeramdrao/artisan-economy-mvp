@@ -51,7 +51,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
                 product.images?.polished ||
                 product.images?.enhanced ||
                 product.images?.original ||
-                '/placeholder.png',
+                '/images/fallback.svg',
             }
           } catch {
             return {
@@ -59,7 +59,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
               quantity: item.quantity,
               title: 'Unknown Product',
               price: 0,
-              imageUrl: '/placeholder.png',
+              imageUrl: '/images/fallback.svg',
             }
           }
         })
@@ -98,7 +98,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             product.images?.polished ||
             product.images?.enhanced ||
             product.images?.original ||
-            '/placeholder.png',
+            '/images/fallback.svg',
         })
       }
       setCart(next)
