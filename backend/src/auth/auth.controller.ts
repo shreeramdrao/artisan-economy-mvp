@@ -7,14 +7,16 @@ import {
   BadRequestException,
   Res,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
+import { SetAuthCookieService } from './set-auth-cookie.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -22,17 +24,22 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly cookieService: SetAuthCookieService,
   ) {}
 
   // ------------------ REGISTER ------------------
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(ThrottlerGuard)
-  @ApiOperation({ summary: 'Register as Buyer or Seller (returns JWT token + cookies)' })
+  @ApiOperation({
+    summary:
+      'Register as Buyer or Seller (returns JWT token + sets authentication cookies)',
+  })
   @ApiResponse({ status: 201, description: 'User registered successfully' })
   async register(
     @Body() registerDto: RegisterDto,
     @Res({ passthrough: true }) res: Response,
+    @Req() req: Request,
   ) {
     // ✅ Validate role
     if (!registerDto.role || !['buyer', 'seller'].includes(registerDto.role)) {
@@ -41,34 +48,8 @@ export class AuthController {
 
     const result = await this.authService.register(registerDto);
 
-    const isProd = this.configService.get<string>('NODE_ENV') === 'production';
-
-    // ✅ Secure HTTP-only JWT cookie
-    res.cookie('token', result.token, {
-      httpOnly: true,
-      secure: isProd, // HTTPS only in production
-      sameSite: isProd ? 'lax' : 'strict', // use lowercase values only ✅
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
-
-    // ✅ Readable cookie for frontend
-    res.cookie(
-      'authUser',
-      JSON.stringify({
-        userId: result.user.userId,
-        name: result.user.name,
-        email: result.user.email,
-        role: result.user.role,
-      }),
-      {
-        httpOnly: false,
-        secure: isProd,
-        sameSite: isProd ? 'lax' : 'strict',
-        path: '/',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-      },
-    );
+    // ✅ Set authentication cookies via centralized service
+    this.cookieService.setCookies(req, res, result.token, result.user);
 
     return {
       status: 'success',
@@ -82,41 +63,20 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @UseGuards(ThrottlerGuard)
-  @ApiOperation({ summary: 'Login as Buyer or Seller (returns JWT token + cookies)' })
+  @ApiOperation({
+    summary:
+      'Login as Buyer or Seller (returns JWT token + sets authentication cookies)',
+  })
   @ApiResponse({ status: 200, description: 'User logged in successfully' })
   async login(
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) res: Response,
+    @Req() req: Request,
   ) {
     const result = await this.authService.login(loginDto);
-    const isProd = this.configService.get<string>('NODE_ENV') === 'production';
 
-    // ✅ Secure HTTP-only JWT cookie
-    res.cookie('token', result.token, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? 'lax' : 'strict', // ✅ lowercase only
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-
-    // ✅ Frontend-readable cookie
-    res.cookie(
-      'authUser',
-      JSON.stringify({
-        userId: result.user.userId,
-        name: result.user.name,
-        email: result.user.email,
-        role: result.user.role,
-      }),
-      {
-        httpOnly: false,
-        secure: isProd,
-        sameSite: isProd ? 'lax' : 'strict', // ✅ lowercase only
-        path: '/',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-      },
-    );
+    // ✅ Set authentication cookies via centralized service
+    this.cookieService.setCookies(req, res, result.token, result.user);
 
     return {
       status: 'success',
@@ -129,22 +89,14 @@ export class AuthController {
   // ------------------ LOGOUT ------------------
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Logout and clear all cookies' })
+  @ApiOperation({ summary: 'Logout and clear all authentication cookies' })
   @ApiResponse({ status: 200, description: 'User logged out successfully' })
-  async logout(@Res({ passthrough: true }) res: Response) {
-    const isProd = process.env.NODE_ENV === 'production';
-
-    res.clearCookie('token', {
-      path: '/',
-      secure: isProd,
-      sameSite: isProd ? 'lax' : 'strict',
-    });
-
-    res.clearCookie('authUser', {
-      path: '/',
-      secure: isProd,
-      sameSite: isProd ? 'lax' : 'strict',
-    });
+  async logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    // ✅ Clear cookies using centralized service (now requires req + res)
+    this.cookieService.clearCookies(req, res);
 
     return { status: 'success', message: 'Logged out successfully' };
   }

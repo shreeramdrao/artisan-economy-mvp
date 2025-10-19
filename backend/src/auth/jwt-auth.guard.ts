@@ -27,9 +27,20 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   getRequest(context: ExecutionContext) {
     const req = context.switchToHttp().getRequest<Request>();
 
+    // Debug logging for cookie issues
+    console.log('🔍 JWT Guard Debug:', {
+      hasAuthHeader: !!req.headers.authorization,
+      hasCookies: !!req.cookies,
+      cookieKeys: req.cookies ? Object.keys(req.cookies) : [],
+      hasTokenCookie: !!req.cookies?.token,
+      origin: req.get('origin'),
+      userAgent: req.get('user-agent')?.substring(0, 50)
+    });
+
     // If "Authorization" header is missing, inject from cookie
     if (!req.headers.authorization && req.cookies?.token) {
       req.headers.authorization = `Bearer ${req.cookies.token}`;
+      console.log('✅ Injected token from cookie to Authorization header');
     }
 
     return req;

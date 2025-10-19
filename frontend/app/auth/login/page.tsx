@@ -2,9 +2,10 @@
 
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import type { Route } from 'next' // ✅ Import Route type for safe navigation
 
-// Force dynamic rendering for client-dependent functionality
 export const dynamic = 'force-dynamic'
+
 import { authApi } from '@/lib/api'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,12 +13,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { useAuth } from '@/context/auth-context'
-
-// ✅ Helper to set a cookie manually
-const setCookie = (name: string, value: string, days = 7) => {
-  const expires = new Date(Date.now() + days * 864e5).toUTCString()
-  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=None; Secure`
-}
 
 function LoginForm() {
   const [email, setEmail] = useState('')
@@ -37,15 +32,11 @@ function LoginForm() {
 
     try {
       const res = await authApi.login({ email, password, role })
-      const { token, user } = res
+      const { user } = res
 
-      if (!token || !user) throw new Error('Invalid server response')
+      if (!user) throw new Error('Invalid server response')
 
-      // ✅ Save JWT token in client cookie (frontend read)
-      setCookie('token', token, 7)
-      setCookie('authUser', JSON.stringify(user), 7)
-
-      // ✅ Save user to context
+      // ✅ Backend handles cookie setting - just update auth context
       login({
         userId: user.userId,
         name: user.name,
@@ -58,18 +49,21 @@ function LoginForm() {
         description: `Welcome back, ${user.name}!`,
       })
 
-      // ✅ Redirect priority
-      if (redirectParam) {
-        router.replace(redirectParam)
+      // ✅ Safe redirect handling
+      if (redirectParam && redirectParam.startsWith('/')) {
+        router.replace(redirectParam as Route)
       } else {
-        router.replace(user.role === 'seller' ? '/seller' : '/buyer')
+        const destination: Route =
+          user.role === 'seller' ? '/seller' : '/buyer'
+        router.replace(destination)
       }
     } catch (err: any) {
       console.error('❌ Login failed:', err)
       toast({
         title: 'Login failed',
         description:
-          err.response?.data?.message || 'Invalid credentials. Please try again.',
+          err.response?.data?.message ||
+          'Invalid credentials. Please try again.',
         variant: 'destructive',
       })
     } finally {
@@ -117,7 +111,9 @@ function LoginForm() {
             <select
               id="role"
               value={role}
-              onChange={(e) => setRole(e.target.value as 'seller' | 'buyer')}
+              onChange={(e) =>
+                setRole(e.target.value as 'seller' | 'buyer')
+              }
               className="w-full mt-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               <option value="buyer">Buyer</option>
@@ -138,7 +134,9 @@ function LoginForm() {
         <p className="text-sm text-center text-gray-600 mt-6">
           Don’t have an account?{' '}
           <a
-            href={`/auth/register${redirectParam ? `?redirect=${redirectParam}` : ''}`}
+            href={`/auth/register${
+              redirectParam ? `?redirect=${redirectParam}` : ''
+            }`}
             className="text-orange-600 font-medium hover:underline"
           >
             Register
@@ -149,7 +147,7 @@ function LoginForm() {
   )
 }
 
-// ✅ Wrap with Suspense to handle async loading
+// ✅ Wrap with Suspense
 export default function LoginPage() {
   return (
     <Suspense fallback={<div className="text-center mt-20">Loading login...</div>}>

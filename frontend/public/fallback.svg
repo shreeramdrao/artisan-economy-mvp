@@ -1,0 +1,6 @@
+<svg width="300" height="300" viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="300" height="300" fill="#F3F4F6"/>
+<path d="M150 100C165.464 100 177.5 122.036 177.5 150C177.5 177.964 165.464 200 150 200C134.536 200 122.5 177.964 122.5 150C122.5 122.036 134.536 100 150 100Z" fill="#E5E7EB"/>
+<path d="M150 120C160.493 120 168.5 138.097 168.5 150C168.5 161.903 160.493 180 150 180C139.507 180 131.5 161.903 131.5 150C131.5 138.097 139.507 120 150 120Z" fill="#DDDDDD"/>
+<text x="150" y="230" text-anchor="middle" fill="#9B9B9B" font-family="Arial" font-size="14">Handcrafted Product</text>
+</svg>

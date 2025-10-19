@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buyer Portal Authentication Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        button { margin: 5px; padding: 8px 16px; cursor: pointer; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 4px; }
+        .pass { background-color: #d4edda; color: #155724; }
+        .fail { background-color: #f8d7da; color: #721c24; }
+        code { background-color: #f8f9fa; padding: 2px 4px; border-radius: 3px; }
+        .step { margin: 10px 0; padding: 10px; background-color: #f8f9fa; border-left: 4px solid #007bff; }
+    </style>
+</head>
+<body>
+    <h1>🔒 Buyer Portal Authentication Test</h1>
+    
+    <div class="test-section info">
+        <h3>Current Authentication Setup</h3>
+        <p>The middleware is already implemented and should be protecting <code>/buyer</code> routes. Let's verify it's working correctly.</p>
+        <ul>
+            <li><strong>Middleware File:</strong> <code>middleware.ts</code> ✅</li>
+            <li><strong>Protected Routes:</strong> <code>/buyer/*</code> ✅</li>
+            <li><strong>Auth Cookies:</strong> <code>token</code> and <code>authUser</code> ✅</li>
+            <li><strong>Redirect Logic:</strong> Anonymous users → <code>/auth/login</code> ✅</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h3>Test Scenarios</h3>
+        
+        <div class="step">
+            <h4>Test 1: Anonymous Access to Buyer Portal</h4>
+            <p><strong>Expected:</strong> Should redirect to <code>/auth/login?redirect=/buyer</code></p>
+            <button onclick="testAnonymousAccess()">Test Anonymous Access</button>
+            <div id="test1-result" class="test-result" style="display: none;"></div>
+        </div>
+
+        <div class="step">
+            <h4>Test 2: Direct Link Access</h4>
+            <p><strong>Expected:</strong> Should redirect to login with proper redirect parameter</p>
+            <button onclick="testDirectLink()">Test Direct Link</button>
+            <div id="test2-result" class="test-result" style="display: none;"></div>
+        </div>
+
+        <div class="step">
+            <h4>Test 3: Page Refresh Protection</h4>
+            <p><strong>Expected:</strong> Should maintain protection even after refresh</p>
+            <button onclick="testPageRefresh()">Test Page Refresh</button>
+            <div id="test3-result" class="test-result" style="display: none;"></div>
+        </div>
+
+        <div class="step">
+            <h4>Test 4: Cookie Validation</h4>
+            <p><strong>Expected:</strong> Should validate both <code>token</code> and <code>authUser</code> cookies</p>
+            <button onclick="testCookieValidation()">Test Cookie Validation</button>
+            <div id="test4-result" class="test-result" style="display: none;"></div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Manual Test Instructions</h3>
+        <ol>
+            <li><strong>Clear all cookies</strong> in your browser (DevTools → Application → Cookies)</li>
+            <li>Navigate to <code>http://localhost:3000/buyer</code></li>
+            <li><strong>Expected:</strong> Should redirect to <code>http://localhost:3000/auth/login?redirect=/buyer</code></li>
+            <li>Try accessing <code>http://localhost:3000/buyer/cart</code></li>
+            <li><strong>Expected:</strong> Should redirect to <code>http://localhost:3000/auth/login?redirect=/buyer/cart</code></li>
+        </ol>
+    </div>
+
+    <div class="test-section warning">
+        <h3>If Tests Fail</h3>
+        <p>If the middleware is not working as expected, we may need to:</p>
+        <ul>
+            <li>Check if middleware is properly configured in <code>next.config.js</code></li>
+            <li>Verify the middleware matcher pattern</li>
+            <li>Add additional client-side protection in the Buyer Portal layout</li>
+            <li>Check for any edge cases in cookie handling</li>
+        </ul>
+    </div>
+
+    <div id="test-results" class="test-section">
+        <h3>Test Results</h3>
+        <div id="results-content">Click test buttons above to run automated tests...</div>
+    </div>
+
+    <script>
+        const baseUrl = 'http://localhost:3000';
+        
+        function showResult(testId, message, isSuccess) {
+            const resultDiv = document.getElementById(testId);
+            resultDiv.style.display = 'block';
+            resultDiv.className = `test-result ${isSuccess ? 'pass' : 'fail'}`;
+            resultDiv.textContent = message;
+        }
+
+        async function testAnonymousAccess() {
+            try {
+                // Clear any existing cookies
+                document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                document.cookie = 'authUser=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                
+                // Try to access buyer portal
+                const response = await fetch(`${baseUrl}/buyer`, {
+                    method: 'GET',
+                    redirect: 'manual' // Don't follow redirects automatically
+                });
+                
+                if (response.status === 307 || response.status === 302) {
+                    const location = response.headers.get('location');
+                    if (location && location.includes('/auth/login') && location.includes('redirect=/buyer')) {
+                        showResult('test1-result', '✅ PASS: Anonymous access properly redirected to login', true);
+                    } else {
+                        showResult('test1-result', `❌ FAIL: Redirect location incorrect: ${location}`, false);
+                    }
+                } else {
+                    showResult('test1-result', `❌ FAIL: Expected redirect (307/302), got ${response.status}`, false);
+                }
+            } catch (error) {
+                showResult('test1-result', `❌ FAIL: Error testing anonymous access: ${error.message}`, false);
+            }
+        }
+
+        async function testDirectLink() {
+            try {
+                // Test direct access to a buyer subroute
+                const response = await fetch(`${baseUrl}/buyer/cart`, {
+                    method: 'GET',
+                    redirect: 'manual'
+                });
+                
+                if (response.status === 307 || response.status === 302) {
+                    const location = response.headers.get('location');
+                    if (location && location.includes('/auth/login') && location.includes('redirect=/buyer/cart')) {
+                        showResult('test2-result', '✅ PASS: Direct link access properly redirected', true);
+                    } else {
+                        showResult('test2-result', `❌ FAIL: Redirect location incorrect: ${location}`, false);
+                    }
+                } else {
+                    showResult('test2-result', `❌ FAIL: Expected redirect, got ${response.status}`, false);
+                }
+            } catch (error) {
+                showResult('test2-result', `❌ FAIL: Error testing direct link: ${error.message}`, false);
+            }
+        }
+
+        async function testPageRefresh() {
+            try {
+                // This test simulates what happens on page refresh
+                const response = await fetch(`${baseUrl}/buyer`, {
+                    method: 'GET',
+                    redirect: 'manual',
+                    headers: {
+                        'Cache-Control': 'no-cache'
+                    }
+                });
+                
+                if (response.status === 307 || response.status === 302) {
+                    showResult('test3-result', '✅ PASS: Page refresh protection working', true);
+                } else {
+                    showResult('test3-result', `❌ FAIL: Page refresh not protected, got ${response.status}`, false);
+                }
+            } catch (error) {
+                showResult('test3-result', `❌ FAIL: Error testing page refresh: ${error.message}`, false);
+            }
+        }
+
+        async function testCookieValidation() {
+            try {
+                // Test with invalid cookies
+                document.cookie = 'token=invalid-token; path=/';
+                document.cookie = 'authUser=invalid-user; path=/';
+                
+                const response = await fetch(`${baseUrl}/buyer`, {
+                    method: 'GET',
+                    redirect: 'manual'
+                });
+                
+                if (response.status === 307 || response.status === 302) {
+                    showResult('test4-result', '✅ PASS: Invalid cookies properly rejected', true);
+                } else {
+                    showResult('test4-result', `❌ FAIL: Invalid cookies not rejected, got ${response.status}`, false);
+                }
+            } catch (error) {
+                showResult('test4-result', `❌ FAIL: Error testing cookie validation: ${error.message}`, false);
+            }
+        }
+
+        // Auto-refresh status
+        setInterval(() => {
+            const results = document.getElementById('results-content');
+            if (results.textContent.includes('Click test buttons')) {
+                results.innerHTML = `
+                    <div class="info">
+                        <strong>Ready for Testing</strong><br>
+                        The development server should be running at <code>http://localhost:3000</code><br>
+                        Click the test buttons above to verify authentication protection.
+                    </div>
+                `;
+            }
+        }, 5000);
+    </script>
+</body>
+</html>

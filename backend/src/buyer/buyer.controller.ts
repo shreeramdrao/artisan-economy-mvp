@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Delete,
+  Patch,
   Param,
   Query,
   Body,
@@ -23,6 +24,8 @@ import {
 import { BuyerService } from './buyer.service';
 import { CheckoutDto } from './dto/checkout.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
+import { AddGuestCartItemDto, UpdateGuestCartItemDto, MigrateGuestCartDto } from './dto/guest-cart.dto';
+import { PaginationDto, PaginatedResponseDto } from '../common/dto/pagination.dto';
 import {
   ProductListResponse,
   ProductDetailResponse,
@@ -40,7 +43,7 @@ export class BuyerController {
 
   // ----------------- PRODUCTS -----------------
   @Get('products')
-  @ApiOperation({ summary: 'Browse all products' })
+  @ApiOperation({ summary: 'Browse all products with pagination' })
   @ApiQuery({ name: 'category', required: false })
   @ApiQuery({ name: 'language', required: false, enum: ['en', 'hi', 'kn'] })
   @ApiQuery({ name: 'minPrice', required: false, type: Number })
@@ -50,14 +53,27 @@ export class BuyerController {
     required: false,
     enum: ['price', 'date', 'popularity'],
   })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (1-based)', example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page', example: 12 })
   @ApiResponse({
     status: 200,
-    description: 'List of products',
-    type: [ProductListResponse],
+    description: 'Paginated list of products',
+    schema: {
+      type: 'object',
+      properties: {
+        items: { type: 'array', items: { $ref: '#/components/schemas/ProductListResponse' } },
+        total: { type: 'number', example: 240 },
+        page: { type: 'number', example: 2 },
+        limit: { type: 'number', example: 12 },
+        totalPages: { type: 'number', example: 20 },
+        hasNext: { type: 'boolean', example: true },
+        hasPrev: { type: 'boolean', example: true },
+      },
+    },
   })
   async getProducts(
-    @Query() query: ProductQueryDto,
-  ): Promise<ProductListResponse[]> {
+    @Query() query: ProductQueryDto & PaginationDto,
+  ): Promise<PaginatedResponseDto<ProductListResponse>> {
     return this.buyerService.getProducts(query);
   }
 
@@ -154,22 +170,44 @@ export class BuyerController {
   // ----------------- ORDERS -----------------
   @UseGuards(JwtAuthGuard)
   @Get('orders')
-  @ApiOperation({ summary: 'Get all orders of the logged-in buyer' })
+  @ApiOperation({ summary: 'Get all orders of the logged-in buyer with pagination' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (1-based)', example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page', example: 10 })
   @ApiResponse({
     status: 200,
-    description: 'List of orders',
-    type: [OrderResponse],
+    description: 'Paginated list of orders',
+    schema: {
+      type: 'object',
+      properties: {
+        items: { type: 'array', items: { $ref: '#/components/schemas/OrderResponse' } },
+        total: { type: 'number', example: 50 },
+        page: { type: 'number', example: 2 },
+        limit: { type: 'number', example: 10 },
+        totalPages: { type: 'number', example: 5 },
+        hasNext: { type: 'boolean', example: true },
+        hasPrev: { type: 'boolean', example: true },
+      },
+    },
   })
-  async getOrders(@Req() req: Request): Promise<OrderResponse[]> {
+  async getOrders(
+    @Req() req: Request,
+    @Query() pagination: PaginationDto,
+  ): Promise<PaginatedResponseDto<OrderResponse>> {
     const user = req.user as any;
     if (!user?.email) throw new BadRequestException('Not authenticated');
-    return this.buyerService.getOrders(user.email);
+    return this.buyerService.getOrders(user.email, pagination);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get('orders/:buyerId')
-  @ApiOperation({ summary: 'Get orders by buyerId (fallback for frontend)' })
-  async getOrdersById(@Param('buyerId') buyerId: string) {
-    return this.buyerService.getOrders(decodeURIComponent(buyerId));
+  @ApiOperation({ summary: 'Get orders by buyerId with pagination (fallback for frontend)' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (1-based)', example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page', example: 10 })
+  async getOrdersById(
+    @Param('buyerId') buyerId: string,
+    @Query() pagination: PaginationDto,
+  ): Promise<PaginatedResponseDto<OrderResponse>> {
+    return this.buyerService.getOrders(decodeURIComponent(buyerId), pagination);
   }
 
   // ----------------- EXTRA FEATURES -----------------
@@ -216,10 +254,86 @@ export class BuyerController {
     return this.buyerService.getCart(user.email);
   }
 
+  @Get('cart/guest')
+  @ApiOperation({ summary: 'Get guest cart (no authentication required)' })
+  async getGuestCart(@Req() req: Request) {
+    const sessionId = Array.isArray(req.headers['x-session-id']) 
+      ? req.headers['x-session-id'][0] 
+      : req.headers['x-session-id'] || req.ip || 'default-guest-session';
+    return this.buyerService.getGuestCart(sessionId);
+  }
+
+  @Post('cart/guest')
+  @ApiOperation({ summary: 'Add item to guest cart' })
+  @ApiResponse({ status: 200, description: 'Updated guest cart' })
+  async addGuestCartItem(
+    @Req() req: Request,
+    @Body() body: AddGuestCartItemDto,
+  ) {
+    const sessionId = Array.isArray(req.headers['x-session-id']) 
+      ? req.headers['x-session-id'][0] 
+      : req.headers['x-session-id'] || req.ip || 'default-guest-session';
+    return this.buyerService.addGuestCartItem(sessionId, body.productId, body.quantity);
+  }
+
+  @Patch('cart/guest/:itemId')
+  @ApiOperation({ summary: 'Update guest cart item quantity' })
+  @ApiResponse({ status: 200, description: 'Updated guest cart' })
+  async updateGuestCartItem(
+    @Req() req: Request,
+    @Param('itemId') itemId: string,
+    @Body() body: UpdateGuestCartItemDto,
+  ) {
+    const sessionId = Array.isArray(req.headers['x-session-id']) 
+      ? req.headers['x-session-id'][0] 
+      : req.headers['x-session-id'] || req.ip || 'default-guest-session';
+    return this.buyerService.updateGuestCartItem(sessionId, itemId, body.quantity);
+  }
+
+  @Delete('cart/guest/:itemId')
+  @ApiOperation({ summary: 'Remove item from guest cart' })
+  @ApiResponse({ status: 200, description: 'Updated guest cart' })
+  async removeGuestCartItem(
+    @Req() req: Request,
+    @Param('itemId') itemId: string,
+  ) {
+    const sessionId = Array.isArray(req.headers['x-session-id']) 
+      ? req.headers['x-session-id'][0] 
+      : req.headers['x-session-id'] || req.ip || 'default-guest-session';
+    return this.buyerService.removeGuestCartItem(sessionId, itemId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('cart/migrate')
+  @ApiOperation({ summary: 'Migrate guest cart to authenticated user' })
+  @ApiResponse({ status: 200, description: 'Migrated cart' })
+  async migrateGuestCart(
+    @Req() req: Request,
+    @Body() body: MigrateGuestCartDto,
+  ) {
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+    
+    const sessionId = Array.isArray(req.headers['x-session-id']) 
+      ? req.headers['x-session-id'][0] 
+      : req.headers['x-session-id'] || req.ip || 'default-guest-session';
+    return this.buyerService.migrateGuestCart(sessionId, user.email);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('cart/:buyerId')
-  @ApiOperation({ summary: 'Get cart by buyerId (fallback for frontend)' })
-  async getCartById(@Param('buyerId') buyerId: string) {
-    return this.buyerService.getCart(decodeURIComponent(buyerId));
+  @ApiOperation({ summary: 'Get cart by buyerId (authenticated endpoint)' })
+  async getCartById(@Param('buyerId') buyerId: string, @Req() req: Request) {
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+    
+    // Security: Only allow users to access their own cart
+    const decodedBuyerId = decodeURIComponent(buyerId);
+    if (decodedBuyerId !== user.email) {
+      throw new BadRequestException('Access denied: Can only access your own cart');
+    }
+    
+    return this.buyerService.getCart(decodedBuyerId);
   }
 
   @UseGuards(JwtAuthGuard)

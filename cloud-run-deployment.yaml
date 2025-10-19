@@ -34,7 +34,37 @@ spec:
         - name: NODE_ENV
           value: "production"
         - name: GOOGLE_CLOUD_PROJECT
-          value: "PROJECT_ID"
+          valueFrom:
+            secretKeyRef:
+              name: project-secrets
+              key: project-id
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: jwt-secret
+        - name: STRIPE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: payment-secrets
+              key: stripe-secret-key
+        - name: RAZORPAY_KEY_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: payment-secrets
+              key: razorpay-key-secret
+        - name: REMOVE_BG_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ai-secrets
+              key: remove-bg-api-key
+        - name: CANVA_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ai-secrets
+              key: canva-api-key
+        - name: FRONTEND_URL
+          value: "https://artisan-economy-frontend-PROJECT_ID.a.run.app"
         resources:
           limits:
             cpu: "2"

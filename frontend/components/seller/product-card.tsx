@@ -113,6 +113,7 @@ export default function ProductCard({
             width={300}
             height={300}
             className="object-cover rounded-lg"
+            onError={(e) => (e.currentTarget.src = '/images/fallback.svg')}
           />
 
           {/* ❤️ Heart button */}

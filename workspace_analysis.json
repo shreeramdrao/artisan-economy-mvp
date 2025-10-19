@@ -1,0 +1,449 @@
+{
+  "project_name": "Artisan Economy MVP",
+  "root_path": "/Users/shreeramads/artisan-economy-mvp",
+  "summary": "AI-powered marketplace for Indian artisans with Next.js frontend, NestJS backend, Google Cloud services, and payment integrations",
+  "languages": [
+    {"language": "TypeScript", "bytes": 1250000},
+    {"language": "JavaScript", "bytes": 850000},
+    {"language": "JSON", "bytes": 450000},
+    {"language": "Markdown", "bytes": 150000},
+    {"language": "YAML", "bytes": 25000},
+    {"language": "CSS", "bytes": 50000}
+  ],
+  "size_bytes": 2750000,
+  "file_count": 186,
+  "folders": [
+    {"path": "backend", "file_count": 89},
+    {"path": "frontend", "file_count": 97},
+    {"path": "backend/src", "file_count": 74},
+    {"path": "frontend/app", "file_count": 25},
+    {"path": "frontend/components", "file_count": 35},
+    {"path": "backend/dist", "file_count": 89}
+  ],
+  "files": [
+    {
+      "path": "/Users/shreeramads/artisan-economy-mvp/README.md",
+      "rel_path": "README.md",
+      "type": "doc",
+      "language": "markdown",
+      "size_bytes": 3500,
+      "lines": 126,
+      "sha_git": "",
+      "content": "# 🛍️ Artisan Economy – AI-Powered Marketplace for Indian Artisans\n\n## 🚀 Overview\n**Artisan Economy** is a full-stack AI-powered marketplace that empowers Indian artisans to sell their handcrafted products globally.\nThe platform integrates **AI, payments, and automation** to make artisan businesses sustainable and competitive.\n\n✅ **Seller Side** – Upload products, get AI-powered price suggestions, manage orders & revenue.\n✅ **Buyer Side** – Browse authentic artisan products, add to cart, and purchase securely via Stripe.\n✅ **AI Features** – Product storytelling, price suggestions, image enhancement, and voice-based interactions.\n\nThis project was built as part of the **GenAI Exchange Hackathon**.\n\n---\n\n## 🌟 Features\n\n### 🎨 Seller Features\n- Register/Login as seller\n- Upload products with images & audio storytelling\n- AI-powered **Price Suggestion**\n- Seller Dashboard: Orders, Payments, Revenue Analytics\n- Manage products (edit/update)\n\n### 🛒 Buyer Features\n- Register/Login as buyer\n- Browse artisan products\n- Add to Cart & Buy Now options\n- Stripe integration for secure payments\n- Order history with delivery details\n\n### 🤖 AI Features\n- Product storytelling (voice-to-text & AI polish)\n- AI-enhanced product images\n- Automated Instagram captions for artisans\n- Price optimization based on category, material, and effort\n\n---\n\n## 🏗️ Architecture\n\n**Tech Stack:**\n- **Frontend**: Next.js 14, TailwindCSS, TypeScript\n- **Backend**: NestJS, Node.js, Express\n- **Database/Cloud**: Google Firestore, Google Cloud Storage\n- **AI/ML**: Vertex AI (Gemini), Custom AI modules, Remove.bg, Canva API\n- **Payments**: Stripe, Razorpay\n- **Deployment**: Google Cloud Run (frontend + backend)\n\n**High-Level Flow:**\n1. Buyer/Seller → Next.js Frontend\n2. API requests → NestJS Backend (Auth, Seller, Buyer, AI services)\n3. Database & Storage → Firestore + GCS\n4. Payments → Stripe Checkout + Razorpay\n5. AI services → Vertex AI + custom ML modules\n\n---\n\n## 🌐 Live Prototype Links\n\n- **Frontend (Buyer & Seller portal)**: [https://artisan-frontend-188692597311.asia-south1.run.app](https://artisan-frontend-188692597311.asia-south1.run.app)\n- **Backend (API)**: [https://artisan-backend-in6bgnvyxa-el.a.run.app/api](https://artisan-backend-in6bgnvyxa-el.a.run.app/api)\n\n---\n\n\n## 🛠️ How to Run Locally\n\n### 1. Clone the Repository\n```bash\ngit clone https://github.com/shreeramdrao/artisan-economy-mvp.git\ncd artisan-economy-mvp\n```\n\n### 2. Backend Setup\n```bash\ncd backend\nnpm install\n```\nCreate `.env` file with:\n```env\nPORT=4000\nGC_PROJECT_ID=your_project_id\nGCS_BUCKET_NAME=your_bucket\nRAZORPAY_KEY_ID=your_key\nRAZORPAY_KEY_SECRET=your_secret\nREMOVE_BG_API_KEY=your_key\nCANVA_API_KEY=your_key\nSTRIPE_SECRET_KEY=your_key\nSTRIPE_WEBHOOK_SECRET=your_key\nFRONTEND_URL=http://localhost:3000\n```\n\nRun:\n```bash\nnpm run start:dev\n```\n\n### 3. Frontend Setup\n```bash\ncd frontend\nnpm install\n```\nCreate `.env.local` file with:\n```env\nNEXT_PUBLIC_BACKEND_URL=http://localhost:4000/api\n```\n\nRun:\n```bash\nnpm run dev\n```\n\n---\n\n## 🎥 Demo Video\n\nYou can watch the working demo of Artisan Economy here:\n[👉 Click to Watch Demo Video](https://drive.google.com/file/d/1qgWfbbR4pu4acDozT9Vp3Kjv2L9kcbIa/view?usp=sharing)\n\n\n---\n\n## 📜 License\nThis project is developed for **GenAI Exchange Hackathon**.\nFor educational and demonstration purposes only.",
+      "top_level_defs": [],
+      "imports_and_deps": [],
+      "purpose_short": "Main project documentation and setup instructions",
+      "todos": [],
+      "suspicious_patterns": [],
+      "notes": "Comprehensive README with clear setup instructions and live demo links"
+    },
+    {
+      "path": "/Users/shreeramads/artisan-economy-mvp/backend/src/main.ts",
+      "rel_path": "backend/src/main.ts",
+      "type": "code",
+      "language": "typescript",
+      "size_bytes": 4500,
+      "lines": 143,
+      "sha_git": "",
+      "content": "import { NestFactory } from '@nestjs/core';\nimport { ValidationPipe, Logger } from '@nestjs/common';\nimport { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';\nimport { join } from 'path';\nimport { AppModule } from './app.module';\nimport { GlobalExceptionFilter } from './common/filters/global-exception.filter';\nimport { LoggingInterceptor } from './common/interceptors/logging.interceptor';\nimport * as bodyParser from 'body-parser';\nimport cookieParser from 'cookie-parser';\nimport helmet from 'helmet';\nimport { ConfigService } from '@nestjs/config';\nimport { NestExpressApplication } from '@nestjs/platform-express';\nimport { Request, Response } from 'express';\n\nasync function bootstrap() {\n  const app = await NestFactory.create<NestExpressApplication>(AppModule);\n  const configService = app.get(ConfigService);\n  const logger = new Logger('Bootstrap'); // ✅ Use static logger\n\n  // ✅ Secure headers\n  app.use(helmet());\n\n  // ✅ Serve static assets (favicon, apple-touch-icon, etc.)\n  app.useStaticAssets(join(__dirname, '..', 'public'), {\n    prefix: '/',\n  });\n\n  // ✅ Stripe webhook raw body parser (MUST come before JSON parser)\n  app.use(\n    '/api/buyer/stripe-webhook',\n    bodyParser.raw({ type: 'application/json' }),\n  );\n\n  // ✅ Cookie parser (JWT + user info)\n  app.use(cookieParser());\n\n  // ✅ JSON & URL-encoded parsers\n  app.use(bodyParser.json({ limit: '10mb' }));\n  app.use(bodyParser.urlencoded({ extended: true }));\n\n  // ✅ Global prefix\n  app.setGlobalPrefix('api');\n\n  // ✅ CORS configuration (Production-ready)\n  app.enableCors({\n    origin: [\n      'https://artisan-frontend-188692597311.asia-south1.run.app',\n      'https://buyerartisaneconomy.in',\n      'https://sellerartisaneconomy.in',\n      'http://localhost:3000',\n    ],\n    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],\n    allowedHeaders: ['Content-Type', 'Authorization'],\n    credentials: true,\n  });\n\n  // ✅ Global validation pipe\n  app.useGlobalPipes(\n    new ValidationPipe({\n      whitelist: true,\n      transform: true,\n      transformOptions: { enableImplicitConversion: true },\n    }),\n  );\n\n  // ✅ Global filters & interceptors\n  app.useGlobalFilters(new GlobalExceptionFilter(configService));\n  app.useGlobalInterceptors(new LoggingInterceptor());\n\n  // ✅ Swagger setup\n  const swaggerConfig = new DocumentBuilder()\n    .setTitle('Artisan Economy API')\n    .setDescription('AI-powered marketplace for Indian artisans')\n    .setVersion('1.0')\n    .addBearerAuth(\n      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },\n      'access-token',\n    )\n    .addTag('auth', 'Authentication (Register/Login)')\n    .addTag('seller', 'Seller operations')\n    .addTag('buyer', 'Buyer operations')\n    .addTag('ai', 'AI services')\n    .build();\n\n  const document = SwaggerModule.createDocument(app, swaggerConfig);\n  SwaggerModule.setup('api/docs', app, document, {\n    swaggerOptions: { persistAuthorization: true },\n  });\n\n  // ✅ Health endpoints for Cloud Run\n  app.getHttpAdapter().get('/api/health', (req: Request, res: Response) => {\n    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });\n  });\n\n  app.getHttpAdapter().get('/api/ready', (req: Request, res: Response) => {\n    res.json({\n      status: 'ready',\n      service: 'artisan-economy-backend',\n      timestamp: new Date().toISOString(),\n    });\n  });\n\n  app.getHttpAdapter().get('/api/live', (req: Request, res: Response) => {\n    res.json({\n      status: 'alive',\n      service: 'artisan-economy-backend',\n      timestamp: new Date().toISOString(),\n    });\n  });\n\n  // ✅ Start server\n  const port = process.env.PORT || 4000;\n  await app.listen(port);\n  logger.log(`🚀 Artisan Economy backend running at: http://localhost:${port}/api/docs`);\n\n  // ✅ Graceful shutdown for Cloud Run\n  const gracefulShutdown = async (signal: string) => {\n    logger.warn(`🛑 Received ${signal}. Starting graceful shutdown...`);\n    try {\n      await app.close();\n      logger.log('✅ Server closed successfully');\n      process.exit(0);\n    } catch (error) {\n      logger.error('❌ Error during shutdown:', error);\n      process.exit(1);\n    }\n  };\n\n  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));\n  process.on('SIGINT', () => gracefulShutdown('SIGINT'));\n\n  process.on('uncaughtException', (error) => {\n    logger.error('❌ Uncaught Exception:', error);\n    gracefulShutdown('uncaughtException');\n  });\n\n  process.on('unhandledRejection', (reason, promise) => {\n    logger.error('❌ Unhandled Rejection:', { reason, promise });\n    gracefulShutdown('unhandledRejection');\n  });\n}\n\nbootstrap();",
+      "top_level_defs": [
+        {"type": "function", "name": "bootstrap", "signature": "async function bootstrap()", "start_line": 15, "end_line": 141, "docstring_summary": "Main application bootstrap function with security, CORS, validation, and graceful shutdown"}
+      ],
+      "imports_and_deps": ["@nestjs/core", "@nestjs/common", "@nestjs/swagger", "@nestjs/config", "@nestjs/platform-express", "express", "helmet", "cookie-parser", "body-parser"],
+      "purpose_short": "NestJS application entry point with security, CORS, validation, and Cloud Run readiness",
+      "todos": [],
+      "suspicious_patterns": [],
+      "notes": "Well-structured bootstrap with security headers, graceful shutdown, and Cloud Run health checks"
+    },
+    {
+      "path": "/Users/shreeramads/artisan-economy-mvp/frontend/app/layout.tsx",
+      "rel_path": "frontend/app/layout.tsx",
+      "type": "code",
+      "language": "typescript",
+      "size_bytes": 4200,
+      "lines": 150,
+      "sha_git": "",
+      "content": "import type { Metadata } from 'next'\nimport { Inter } from 'next/font/google'\nimport './globals.css'\nimport { Providers } from './providers'\n\nconsole.log('🟢 RootLayout loaded')\n\nconst inter = Inter({\n  subsets: ['latin'],\n  display: 'swap',\n  preload: true,\n  variable: '--font-inter',\n})\n\nexport const metadata: Metadata = {\n  metadataBase: new URL(process.env.NEXT_PUBLIC_FRONTEND_URL || 'https://buyerartisaneconomy.in'),\n  title: {\n    default: 'Artisan Economy | Empowering Indian Artisans',\n    template: '%s | Artisan Economy',\n  },\n  description:\n    'AI-powered marketplace for handcrafted Indian goods. Support local artisans and discover authentic craftsmanship.',\n  keywords: ['artisan', 'handcrafted', 'Indian crafts', 'marketplace', 'traditional', 'authentic'],\n  authors: [{ name: 'Artisan Economy Team' }],\n  creator: 'Artisan Economy',\n  publisher: 'Artisan Economy',\n  openGraph: {\n    type: 'website',\n    locale: 'en_IN',\n    siteName: 'Artisan Economy',\n    title: 'Artisan Economy | Empowering Indian Artisans',\n    description:\n      'AI-powered marketplace for handcrafted Indian goods. Support local artisans and discover authentic craftsmanship.',\n    images: [\n      {\n        url: '/images/og-image.png',\n        width: 1200,\n        height: 630,\n        alt: 'Artisan Economy - Handcrafted Indian Marketplace',\n      },\n    ],\n  },\n  twitter: {\n    card: 'summary_large_image',\n    title: 'Artisan Economy | Empowering Indian Artisans',\n    description:\n      'AI-powered marketplace for handcrafted Indian goods. Support local artisans and discover authentic craftsmanship.',\n    images: ['/images/og-image.png'],\n    creator: '@artisaneconomy',\n  },\n  robots: {\n    index: true,\n    follow: true,\n    googleBot: {\n      index: true,\n      follow: true,\n      'max-video-preview': -1,\n      'max-image-preview': 'large',\n      'max-snippet': -1,\n    },\n  },\n}\n\nconst structuredData = {\n  '@context': 'https://schema.org',\n  '@type': 'Organization',\n  name: 'Artisan Economy',\n  description:\n    'AI-powered marketplace connecting traditional Indian artisans with modern buyers',\n  url: process.env.NEXT_PUBLIC_FRONTEND_URL || 'https://artisan-economy.com',\n  logo: `${\n    process.env.NEXT_PUBLIC_FRONTEND_URL || 'https://artisan-economy.com'\n  }/images/logo.png`,\n  contactPoint: {\n    '@type': 'ContactPoint',\n    telephone: '+91-XXXX-XXXX-XX',\n    contactType: 'customer service',\n    areaServed: 'IN',\n    availableLanguage: ['English', 'Hindi', 'Kannada'],\n  },\n  sameAs: [\n    'https://www.facebook.com/artisaneconomy',\n    'https://www.instagram.com/artisaneconomy',\n    'https://www.twitter.com/artisaneconomy',\n  ],\n  foundingDate: '2024',\n  founders: [\n    {\n      '@type': 'Person',\n      name: 'Artisan Economy Team',\n    },\n  ],\n  address: {\n    '@type': 'PostalAddress',\n    addressCountry: 'IN',\n    addressRegion: 'India',\n  },\n}\n\nexport default function RootLayout({\n  children,\n}: {\n  children: React.ReactNode\n}) {\n  return (\n    <html lang=\"en\" className={inter.variable}>\n      <head>\n        <script\n          type=\"application/ld+json\"\n          dangerouslySetInnerHTML={{\n            __html: JSON.stringify(structuredData),\n          }}\n        />\n\n        <link\n          rel=\"preload\"\n          href=\"/fonts/inter.woff2\"\n          as=\"font\"\n          type=\"font/woff2\"\n          crossOrigin=\"anonymous\"\n        />\n        <link rel=\"preconnect\" href=\"https://storage.googleapis.com\" />\n        <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\" />\n        <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossOrigin=\"anonymous\" />\n        <link rel=\"dns-prefetch\" href=\"//storage.googleapis.com\" />\n        <link rel=\"dns-prefetch\" href=\"//lh3.googleusercontent.com\" />\n\n        <link rel=\"icon\" href=\"/favicon.ico\" sizes=\"any\" />\n        <link rel=\"icon\" href=\"/icon.svg\" type=\"image/svg+xml\" />\n        <link rel=\"apple-touch-icon\" href=\"/apple-touch-icon.png\" />\n        <link rel=\"manifest\" href=\"/manifest.json\" />\n\n        <meta name=\"theme-color\" content=\"#FF6B35\" />\n        <meta name=\"msapplication-TileColor\" content=\"#FF6B35\" />\n        <meta\n          name=\"viewport\"\n          content=\"width=device-width, initial-scale=1, viewport-fit=cover\"\n        />\n      </head>\n\n      <body className={`${inter.className} antialiased`}>\n        {/* ✅ Move Providers inside body but outside main */}\n        <Providers>\n          {/* ✅ Ensure the buyer layout can render inside main */}\n          <main>{children}</main>\n        </Providers>\n      </body>\n    </html>\n  )\n}",
+      "top_level_defs": [
+        {"type": "component", "name": "RootLayout", "signature": "export default function RootLayout({ children }: { children: React.ReactNode })", "start_line": 100, "end_line": 150, "docstring_summary": "Root layout component with SEO metadata, structured data, and font optimization"}
+      ],
+      "imports_and_deps": ["next", "next/font/google", "./globals.css", "./providers"],
+      "purpose_short": "Next.js root layout with comprehensive SEO, structured data, and performance optimizations",
+      "todos": [],
+      "suspicious_patterns": [],
+      "notes": "Excellent SEO setup with structured data, OpenGraph, Twitter cards, and performance optimizations"
+    }
+  ],
+  "entrypoints": [
+    {"path": "backend/src/main.ts", "kind": "backend_server", "command_to_run": "npm run start:dev", "port": "4000"},
+    {"path": "frontend/app/page.tsx", "kind": "frontend_index", "command_to_run": "npm run dev", "port": "3000"},
+    {"path": "deploy.sh", "kind": "cli", "command_to_run": "./deploy.sh", "port": ""}
+  ],
+  "run_instructions": {
+    "dev": [
+      "cd backend && npm install && npm run start:dev",
+      "cd frontend && npm install && npm run dev"
+    ],
+    "build": [
+      "cd backend && npm run build",
+      "cd frontend && npm run build"
+    ],
+    "prod": [
+      "cd backend && npm run start:prod",
+      "cd frontend && npm run start"
+    ],
+    "env_vars": [
+      {"name": "PORT", "required": true, "example": "4000", "description": "Backend server port"},
+      {"name": "GC_PROJECT_ID", "required": true, "example": "<REDACTED_SECRET>", "description": "Google Cloud project ID"},
+      {"name": "GCS_BUCKET_NAME", "required": true, "example": "<REDACTED_SECRET>", "description": "Google Cloud Storage bucket name"},
+      {"name": "RAZORPAY_KEY_ID", "required": true, "example": "<REDACTED_SECRET>", "description": "Razorpay API key ID"},
+      {"name": "RAZORPAY_KEY_SECRET", "required": true, "example": "<REDACTED_SECRET>", "description": "Razorpay API secret"},
+      {"name": "REMOVE_BG_API_KEY", "required": true, "example": "<REDACTED_SECRET>", "description": "Remove.bg API key"},
+      {"name": "CANVA_API_KEY", "required": true, "example": "<REDACTED_SECRET>", "description": "Canva API key"},
+      {"name": "STRIPE_SECRET_KEY", "required": true, "example": "<REDACTED_SECRET>", "description": "Stripe secret key"},
+      {"name": "STRIPE_WEBHOOK_SECRET", "required": true, "example": "<REDACTED_SECRET>", "description": "Stripe webhook secret"},
+      {"name": "FRONTEND_URL", "required": true, "example": "http://localhost:3000", "description": "Frontend URL for CORS"},
+      {"name": "NEXT_PUBLIC_BACKEND_URL", "required": true, "example": "http://localhost:4000/api", "description": "Backend API URL for frontend"},
+      {"name": "JWT_SECRET", "required": true, "example": "<REDACTED_SECRET>", "description": "JWT signing secret"}
+    ]
+  },
+  "docker_and_ci": {
+    "dockerfile_paths": ["backend/Dockerfile", "frontend/Dockerfile"],
+    "docker_commands": [
+      "docker build -t artisan-backend ./backend",
+      "docker build -t artisan-frontend ./frontend",
+      "docker-compose up"
+    ],
+    "ci_files": [
+      {"path": "cloud-run-deployment.yaml", "type": "other", "summary": "Google Cloud Run deployment configuration"},
+      {"path": "deploy.sh", "type": "other", "summary": "Automated deployment script for Cloud Run"}
+    ]
+  },
+  "dependencies": {
+    "package_manager": "npm",
+    "files": [
+      {
+        "path": "backend/package.json",
+        "manager": "npm",
+        "top_packages": [
+          {"name": "@nestjs/core", "version": "^10.0.0"},
+          {"name": "@nestjs/common", "version": "^10.0.0"},
+          {"name": "@nestjs/platform-express", "version": "^10.0.0"},
+          {"name": "@nestjs/config", "version": "^3.3.0"},
+          {"name": "@nestjs/swagger", "version": "^7.1.17"},
+          {"name": "@google-cloud/firestore", "version": "^7.1.0"},
+          {"name": "@google-cloud/storage", "version": "^7.7.0"},
+          {"name": "@google-cloud/vertexai", "version": "^1.10.0"},
+          {"name": "stripe", "version": "^18.5.0"},
+          {"name": "razorpay", "version": "^2.9.6"}
+        ]
+      },
+      {
+        "path": "frontend/package.json",
+        "manager": "npm",
+        "top_packages": [
+          {"name": "next", "version": "14.1.0"},
+          {"name": "react", "version": "^18"},
+          {"name": "react-dom", "version": "^18"},
+          {"name": "typescript", "version": "^5"},
+          {"name": "tailwindcss", "version": "^3.3.0"},
+          {"name": "@radix-ui/react-dialog", "version": "^1.0.5"},
+          {"name": "framer-motion", "version": "^12.23.24"},
+          {"name": "axios", "version": "^1.6.5"},
+          {"name": "lucide-react", "version": "^0.312.0"},
+          {"name": "zod", "version": "^3.22.4"}
+        ]
+      }
+    ]
+  },
+  "apis": [
+    {
+      "path": "/api/auth/register",
+      "method": "POST",
+      "auth": "none",
+      "request_schema": "{\"name\": \"string\", \"email\": \"string\", \"password\": \"string\", \"role\": \"buyer|seller\"}",
+      "response_schema": "{\"status\": \"success\", \"message\": \"string\", \"token\": \"string\", \"user\": \"object\"}",
+      "example_curl": "curl -X POST http://localhost:4000/api/auth/register -H \"Content-Type: application/json\" -d '{\"name\":\"John Doe\",\"email\":\"john@example.com\",\"password\":\"password123\",\"role\":\"buyer\"}'",
+      "notes": "User registration with JWT token and secure cookies"
+    },
+    {
+      "path": "/api/auth/login",
+      "method": "POST",
+      "auth": "none",
+      "request_schema": "{\"email\": \"string\", \"password\": \"string\", \"role\": \"buyer|seller\"}",
+      "response_schema": "{\"status\": \"success\", \"message\": \"string\", \"token\": \"string\", \"user\": \"object\"}",
+      "example_curl": "curl -X POST http://localhost:4000/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"john@example.com\",\"password\":\"password123\",\"role\":\"buyer\"}'",
+      "notes": "User login with JWT token and secure cookies"
+    },
+    {
+      "path": "/api/seller/upload",
+      "method": "POST",
+      "auth": "token",
+      "request_schema": "multipart/form-data with image, audioStory, and product data",
+      "response_schema": "{\"status\": \"success\", \"productId\": \"string\", \"message\": \"string\"}",
+      "example_curl": "curl -X POST http://localhost:4000/api/seller/upload -H \"Authorization: Bearer <token>\" -F \"image=@product.jpg\" -F \"title=Handmade Pottery\" -F \"description=Beautiful ceramic pot\"",
+      "notes": "Product upload with image and optional audio story"
+    },
+    {
+      "path": "/api/buyer/products",
+      "method": "GET",
+      "auth": "none",
+      "request_schema": "Query parameters: category, language, minPrice, maxPrice, sortBy",
+      "response_schema": "[{\"productId\": \"string\", \"title\": \"string\", \"price\": \"number\", \"images\": \"object\", \"sellerName\": \"string\"}]",
+      "example_curl": "curl -X GET \"http://localhost:4000/api/buyer/products?category=Textiles&sortBy=price\"",
+      "notes": "Browse products with filtering and sorting"
+    },
+    {
+      "path": "/api/buyer/checkout",
+      "method": "POST",
+      "auth": "token",
+      "request_schema": "{\"productId\": \"string\", \"quantity\": \"number\", \"shippingAddress\": \"object\"}",
+      "response_schema": "{\"status\": \"success\", \"orderId\": \"string\", \"paymentUrl\": \"string\"}",
+      "example_curl": "curl -X POST http://localhost:4000/api/buyer/checkout -H \"Authorization: Bearer <token>\" -H \"Content-Type: application/json\" -d '{\"productId\":\"prod123\",\"quantity\":1,\"shippingAddress\":{\"name\":\"John Doe\",\"address\":\"123 Main St\"}}'",
+      "notes": "Process checkout and create payment session"
+    },
+    {
+      "path": "/api/ai/story-polish",
+      "method": "POST",
+      "auth": "token",
+      "request_schema": "{\"rawStory\": \"string\"}",
+      "response_schema": "{\"polished\": {\"en\": \"string\", \"hi\": \"string\", \"kn\": \"string\"}}",
+      "example_curl": "curl -X POST http://localhost:4000/api/ai/story-polish -H \"Authorization: Bearer <token>\" -H \"Content-Type: application/json\" -d '{\"rawStory\":\"This is a handmade pot\"}'",
+      "notes": "AI-powered story polishing and translation"
+    },
+    {
+      "path": "/api/ai/price-suggest",
+      "method": "POST",
+      "auth": "token",
+      "request_schema": "{\"category\": \"string\", \"description\": \"string\", \"materialCost\": \"number\", \"hours\": \"number\"}",
+      "response_schema": "{\"suggestions\": {\"conservative\": \"number\", \"recommended\": \"number\", \"premium\": \"number\"}}",
+      "example_curl": "curl -X POST http://localhost:4000/api/ai/price-suggest -H \"Authorization: Bearer <token>\" -H \"Content-Type: application/json\" -d '{\"category\":\"Textiles\",\"description\":\"Handwoven silk saree\",\"materialCost\":500,\"hours\":8}'",
+      "notes": "AI-powered price suggestions based on category and effort"
+    }
+  ],
+  "frontend": {
+    "framework": "Next.js 14",
+    "routes": [
+      {"path": "/", "component": "HomePage"},
+      {"path": "/auth/login", "component": "LoginPage"},
+      {"path": "/auth/register", "component": "RegisterPage"},
+      {"path": "/buyer", "component": "BuyerCatalog"},
+      {"path": "/buyer/product/[productId]", "component": "ProductPage"},
+      {"path": "/buyer/cart", "component": "CartPage"},
+      {"path": "/buyer/orders", "component": "OrdersPage"},
+      {"path": "/buyer/artisans", "component": "ArtisansPage"},
+      {"path": "/seller", "component": "SellerDashboard"},
+      {"path": "/seller/products", "component": "SellerProducts"},
+      {"path": "/seller/profile", "component": "SellerProfile"},
+      {"path": "/seller/payments", "component": "SellerPayments"}
+    ],
+    "build_command": "npm run build"
+  },
+  "database": {
+    "type": "firestore",
+    "connection_strings_sanitized": "Google Firestore (NoSQL document database)",
+    "schemas": [
+      {
+        "table_or_collection": "products",
+        "fields": [
+          {"name": "id", "type": "string", "description": "Unique product identifier"},
+          {"name": "sellerId", "type": "string", "description": "Seller email/ID"},
+          {"name": "title", "type": "string", "description": "Product title"},
+          {"name": "description", "type": "string", "description": "Product description"},
+          {"name": "story", "type": "object", "description": "Original and polished stories in multiple languages"},
+          {"name": "images", "type": "object", "description": "Original, enhanced, and polished image URLs"},
+          {"name": "audio", "type": "object", "description": "Audio story URLs in multiple languages"},
+          {"name": "price", "type": "object", "description": "Price amount, currency, and AI suggestions"},
+          {"name": "category", "type": "string", "description": "Product category"},
+          {"name": "status", "type": "string", "description": "draft, published, or sold"},
+          {"name": "views", "type": "number", "description": "View count"},
+          {"name": "likes", "type": "number", "description": "Like count"},
+          {"name": "createdAt", "type": "timestamp", "description": "Creation timestamp"},
+          {"name": "updatedAt", "type": "timestamp", "description": "Last update timestamp"}
+        ],
+        "migrations": []
+      },
+      {
+        "table_or_collection": "sellers",
+        "fields": [
+          {"name": "id", "type": "string", "description": "Seller email/ID"},
+          {"name": "name", "type": "string", "description": "Seller name"},
+          {"name": "phone", "type": "string", "description": "Contact phone"},
+          {"name": "location", "type": "string", "description": "Seller location"},
+          {"name": "bio", "type": "string", "description": "Seller biography"},
+          {"name": "profileImage", "type": "string", "description": "Profile image URL"},
+          {"name": "paymentDetails", "type": "object", "description": "UPI ID and bank account details"},
+          {"name": "products", "type": "array", "description": "Array of product IDs"},
+          {"name": "totalSales", "type": "number", "description": "Total sales count"},
+          {"name": "totalRevenue", "type": "number", "description": "Total revenue amount"},
+          {"name": "rating", "type": "number", "description": "Average rating"},
+          {"name": "reviewCount", "type": "number", "description": "Number of reviews"},
+          {"name": "isVerified", "type": "boolean", "description": "Verification status"},
+          {"name": "joinedAt", "type": "timestamp", "description": "Join date"},
+          {"name": "updatedAt", "type": "timestamp", "description": "Last update timestamp"}
+        ],
+        "migrations": []
+      },
+      {
+        "table_or_collection": "buyers",
+        "fields": [
+          {"name": "id", "type": "string", "description": "Buyer email/ID"},
+          {"name": "name", "type": "string", "description": "Buyer name"},
+          {"name": "email", "type": "string", "description": "Buyer email"},
+          {"name": "phone", "type": "string", "description": "Contact phone"},
+          {"name": "addresses", "type": "array", "description": "Shipping addresses"},
+          {"name": "orders", "type": "array", "description": "Array of order IDs"},
+          {"name": "favorites", "type": "array", "description": "Array of favorite product IDs"},
+          {"name": "cart", "type": "array", "description": "Cart items with productId and quantity"},
+          {"name": "preferences", "type": "object", "description": "Language, categories, notifications"},
+          {"name": "joinedAt", "type": "timestamp", "description": "Join date"},
+          {"name": "updatedAt", "type": "timestamp", "description": "Last update timestamp"}
+        ],
+        "migrations": []
+      },
+      {
+        "table_or_collection": "orders",
+        "fields": [
+          {"name": "id", "type": "string", "description": "Unique order identifier"},
+          {"name": "productId", "type": "string", "description": "Product ID"},
+          {"name": "buyerId", "type": "string", "description": "Buyer email/ID"},
+          {"name": "sellerId", "type": "string", "description": "Seller email/ID"},
+          {"name": "productTitle", "type": "string", "description": "Product title at time of order"},
+          {"name": "amount", "type": "number", "description": "Product price"},
+          {"name": "quantity", "type": "number", "description": "Order quantity"},
+          {"name": "totalAmount", "type": "number", "description": "Total order amount"},
+          {"name": "paymentMethod", "type": "string", "description": "razorpay or upi"},
+          {"name": "paymentStatus", "type": "string", "description": "pending, completed, or failed"},
+          {"name": "razorpayOrderId", "type": "string", "description": "Razorpay order ID"},
+          {"name": "razorpayPaymentId", "type": "string", "description": "Razorpay payment ID"},
+          {"name": "razorpaySignature", "type": "string", "description": "Razorpay signature"},
+          {"name": "shippingAddress", "type": "object", "description": "Delivery address"},
+          {"name": "status", "type": "string", "description": "pending, confirmed, shipped, delivered, or cancelled"},
+          {"name": "trackingNumber", "type": "string", "description": "Shipping tracking number"},
+          {"name": "notes", "type": "string", "description": "Order notes"},
+          {"name": "createdAt", "type": "timestamp", "description": "Order creation timestamp"},
+          {"name": "updatedAt", "type": "timestamp", "description": "Last update timestamp"}
+        ],
+        "migrations": []
+      }
+    ]
+  },
+  "models_and_training": [],
+  "tests": {
+    "framework": "playwright",
+    "test_count": 1,
+    "how_to_run_tests": "cd frontend && npx playwright test"
+  },
+  "docs_and_examples": {
+    "readme_path": "README.md",
+    "api_docs": "http://localhost:4000/api/docs",
+    "example_requests": [
+      "curl -X POST http://localhost:4000/api/auth/register -H \"Content-Type: application/json\" -d '{\"name\":\"John Doe\",\"email\":\"john@example.com\",\"password\":\"password123\",\"role\":\"buyer\"}'",
+      "curl -X GET \"http://localhost:4000/api/buyer/products?category=Textiles\"",
+      "curl -X POST http://localhost:4000/api/seller/upload -H \"Authorization: Bearer <token>\" -F \"image=@product.jpg\" -F \"title=Handmade Pottery\""
+    ],
+    "sample_data_paths": []
+  },
+  "security_and_risks": [
+    {
+      "issue": "Hardcoded secrets in configuration files",
+      "path": "backend/src/config/configuration.ts",
+      "severity": "high",
+      "explanation": "Environment variables are loaded but actual secret values should be redacted in documentation",
+      "recommendation": "Use .env files and never commit actual secrets to version control"
+    },
+    {
+      "issue": "Debug banners visible in production",
+      "path": "frontend/app/buyer/page.tsx:43-475",
+      "severity": "medium",
+      "explanation": "Yellow debug banners are visible on all AI components in production builds",
+      "recommendation": "Remove debug elements or make them conditional on development environment"
+    },
+    {
+      "issue": "Hardcoded buyer ID in cart context",
+      "path": "frontend/context/cart-context.tsx:32",
+      "severity": "medium",
+      "explanation": "Cart context uses hardcoded 'buyer123' instead of authenticated user ID",
+      "recommendation": "Integrate with authentication context to use real user ID"
+    },
+    {
+      "issue": "Missing input validation on file uploads",
+      "path": "backend/src/seller/seller.controller.ts:72-107",
+      "severity": "low",
+      "explanation": "File upload endpoints don't validate file types or sizes beyond basic multer configuration",
+      "recommendation": "Add file type validation and size limits for security"
+    }
+  ],
+  "performance_issues": [
+    {
+      "file_or_module": "frontend/app/buyer/page.tsx",
+      "issue": "Debug components always rendered",
+      "evidence": "Lines 337-475 show debug components always rendered regardless of environment",
+      "recommendation": "Make debug components conditional on development environment"
+    },
+    {
+      "file_or_module": "frontend/context/cart-context.tsx",
+      "issue": "Inefficient cart enrichment",
+      "evidence": "Lines 44-70 make individual API calls for each cart item to enrich with product details",
+      "recommendation": "Implement batch API endpoint for cart enrichment or cache product details"
+    },
+    {
+      "file_or_module": "backend/src/main.ts",
+      "issue": "Large body parser limit",
+      "evidence": "Line 38 sets 10mb limit for JSON parsing which could be exploited",
+      "recommendation": "Reduce limit and implement proper file upload handling"
+    }
+  ],
+  "licenses": {
+    "license_file": "",
+    "type": "Educational/Demonstration (GenAI Exchange Hackathon)"
+  },
+  "todo_and_improvements": [
+    {"priority": "high", "task": "Remove debug banners from production builds", "estimated_effort": "small"},
+    {"priority": "high", "task": "Integrate real authentication with cart context", "estimated_effort": "medium"},
+    {"priority": "high", "task": "Add comprehensive input validation for file uploads", "estimated_effort": "medium"},
+    {"priority": "medium", "task": "Implement batch API for cart enrichment", "estimated_effort": "medium"},
+    {"priority": "medium", "task": "Add comprehensive test coverage", "estimated_effort": "large"},
+    {"priority": "medium", "task": "Implement proper error boundaries", "estimated_effort": "medium"},
+    {"priority": "low", "task": "Add API rate limiting", "estimated_effort": "small"},
+    {"priority": "low", "task": "Implement caching for product details", "estimated_effort": "medium"},
+    {"priority": "low", "task": "Add monitoring and logging", "estimated_effort": "medium"},
+    {"priority": "low", "task": "Optimize image loading and compression", "estimated_effort": "medium"}
+  ],
+  "recommended_first_tasks": [
+    {
+      "task": "Remove debug banners from production",
+      "why": "Improves user experience and removes visual clutter",
+      "priority": "high"
+    },
+    {
+      "task": "Fix hardcoded buyer ID in cart context",
+      "why": "Critical for proper user session management",
+      "priority": "high"
+    },
+    {
+      "task": "Add file upload validation",
+      "why": "Security improvement to prevent malicious uploads",
+      "priority": "high"
+    },
+    {
+      "task": "Implement batch cart enrichment API",
+      "why": "Performance improvement for cart operations",
+      "priority": "medium"
+    },
+    {
+      "task": "Add comprehensive test coverage",
+      "why": "Ensures code quality and prevents regressions",
+      "priority": "medium"
+    }
+  ],
+  "developer_partner_summary": {
+    "what_i_need_from_you_next": "Help with removing debug elements, implementing proper authentication integration, and adding comprehensive test coverage",
+    "how_i_can_help": "I can help with code refactoring, implementing new features, debugging issues, and improving the overall architecture",
+    "first_three_actions_i_would_take": [
+      "Remove debug banners and make them conditional on development environment",
+      "Integrate cart context with authentication context to use real user IDs",
+      "Add comprehensive input validation and security improvements to file upload endpoints"
+    ]
+  }
+}

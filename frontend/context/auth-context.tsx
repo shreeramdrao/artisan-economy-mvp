@@ -34,35 +34,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const pathname = usePathname()
-
-  // ✅ Auto-load from cookies (authUser) on first mount with error handling
+  
+  // ✅ Single auth initialization effect with deterministic loading
   useEffect(() => {
     const loadUser = async () => {
+      console.debug('🔄 AuthProvider: Starting auth load...')
+      const startTime = Date.now()
+      
       try {
         // Check if we have authUser cookie
         const cookieUser = getCookie('authUser')
-        if (cookieUser) {
-          const parsed = JSON.parse(decodeURIComponent(cookieUser))
-          setUser(parsed)
-        }
-
-        // Verify token via backend (ensures JWT still valid)
         const tokenCookie = getCookie('token')
-        if (!tokenCookie) {
-          // No token found, logout user
-          logout()
+        
+        console.debug(`🍪 AuthProvider: Cookies found - authUser=${!!cookieUser}, token=${!!tokenCookie}`)
+        
+        // If no cookies, user is not logged in - set loading false immediately
+        if (!cookieUser || !tokenCookie) {
+          console.debug('❌ AuthProvider: No cookies found, user not logged in')
+          setUser(null)
+          setLoading(false)
           return
         }
+        
+        // Parse user data with proper error handling
+        let parsed: User
+        try {
+          parsed = JSON.parse(decodeURIComponent(cookieUser))
+          console.debug('✅ AuthProvider: Successfully parsed user data:', parsed.role)
+        } catch (parseErr) {
+          console.error('❌ AuthProvider: JSON parse error:', parseErr)
+          setUser(null)
+          setLoading(false)
+          return
+        }
+        
+        setUser(parsed)
 
-        const res = await authApi.verify(tokenCookie)
-        if (!res.valid) {
-          console.warn('JWT expired or invalid, forcing logout...')
-          logout()
+        // ✅ Non-blocking token verification - don't block initial state resolution
+        // Let middleware handle server-side redirects for invalid tokens
+        try {
+          console.debug('🔍 AuthProvider: Verifying token...')
+          const res = await authApi.verify(tokenCookie)
+          if (!res.valid) {
+            console.warn('⚠️ AuthProvider: JWT expired or invalid, clearing user state...')
+            setUser(null)
+          } else {
+            console.debug('✅ AuthProvider: Token verification successful')
+          }
+        } catch (verifyErr) {
+          console.warn('⚠️ AuthProvider: Token verification failed:', verifyErr)
+          // Don't clear user state here - let middleware handle redirects
         }
       } catch (err) {
-        console.error('Auth error during user load:', err)
-        logout()
+        console.error('❌ AuthProvider: Auth error during user load:', err)
+        setUser(null)
       } finally {
+        // ✅ Always set loading false - guarantee deterministic behavior
+        const loadTime = Date.now() - startTime
+        console.debug(`✅ AuthProvider: Auth load completed in ${loadTime}ms, setting loading=false`)
         setLoading(false)
       }
     }
@@ -77,23 +106,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return match ? match[2] : null
   }
 
-  // ✅ Save user → cookie only (no localStorage for security, no JWT token storage)
+  // ✅ Save user → backend handles cookies, just update local state
   const login = (userData: User) => {
     try {
       if (typeof window !== 'undefined') {
-        // Only store user data (email, role, name, userId) - NEVER store JWT token
-        const safeUserData = {
-          userId: userData.userId,
-          name: userData.name,
-          email: userData.email,
-          role: userData.role,
-        }
-        
-        // Set the authUser cookie (non-sensitive data only)
-        document.cookie = `authUser=${encodeURIComponent(
-          JSON.stringify(safeUserData)
-        )}; path=/; SameSite=Lax; Secure; max-age=${7 * 24 * 60 * 60}` // 7 days
-        
         // Dispatch custom event for cross-tab sync
         window.dispatchEvent(new CustomEvent('authChanged'))
       }
@@ -112,14 +128,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // ✅ Logout → clear all cookies securely (no localStorage)
+  // ✅ Logout → backend handles cookie clearing via API call
   const logout = () => {
     if (typeof window !== 'undefined') {
-      // Clear authUser cookie securely
-      document.cookie = 'authUser=; Max-Age=0; path=/; Secure; SameSite=Lax'
-      // Clear token cookie securely (though it's httpOnly, this ensures cleanup)
-      document.cookie = 'token=; Max-Age=0; path=/; Secure; SameSite=Lax'
-      
       // Dispatch custom event for cross-tab sync
       window.dispatchEvent(new CustomEvent('authChanged'))
     }
@@ -164,7 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
       }}
     >
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   )
 }

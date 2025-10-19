@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navbar Hydration Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { margin: 5px; padding: 8px 16px; cursor: pointer; }
+        .disabled { opacity: 0.5; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <h1>Navbar Hydration Test</h1>
+    
+    <div class="test-section info">
+        <h3>Test Instructions:</h3>
+        <ol>
+            <li>Open the Buyer Portal at <code>http://localhost:3000/buyer</code></li>
+            <li>Refresh the page (F5 or Ctrl+R)</li>
+            <li>Check if Login and Register buttons are clickable</li>
+            <li>Verify navigation works correctly</li>
+        </ol>
+    </div>
+
+    <div class="test-section">
+        <h3>Expected Behavior After Fix:</h3>
+        <ul>
+            <li>✅ Login button should be clickable and navigate to <code>/auth/login</code></li>
+            <li>✅ Register button should be clickable and navigate to <code>/auth/register</code></li>
+            <li>✅ No console errors related to hydration</li>
+            <li>✅ Buttons should work immediately after page refresh</li>
+            <li>✅ No "Loading..." text should persist indefinitely</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h3>Test Scenarios:</h3>
+        <button onclick="testScenario1()">Test 1: Fresh Load</button>
+        <button onclick="testScenario2()">Test 2: Page Refresh</button>
+        <button onclick="testScenario3()">Test 3: Anonymous Mode</button>
+    </div>
+
+    <div id="test-results" class="test-section">
+        <h3>Test Results:</h3>
+        <div id="results-content">Run tests to see results...</div>
+    </div>
+
+    <script>
+        function testScenario1() {
+            const results = document.getElementById('results-content');
+            results.innerHTML = `
+                <div class="info">
+                    <strong>Test 1: Fresh Load</strong><br>
+                    Navigate to <code>http://localhost:3000/buyer</code> directly.<br>
+                    Expected: Login/Register buttons should work immediately.
+                </div>
+            `;
+        }
+
+        function testScenario2() {
+            const results = document.getElementById('results-content');
+            results.innerHTML = `
+                <div class="info">
+                    <strong>Test 2: Page Refresh</strong><br>
+                    While on <code>http://localhost:3000/buyer</code>, press F5 or Ctrl+R.<br>
+                    Expected: Login/Register buttons should remain clickable after refresh.
+                </div>
+            `;
+        }
+
+        function testScenario3() {
+            const results = document.getElementById('results-content');
+            results.innerHTML = `
+                <div class="info">
+                    <strong>Test 3: Anonymous Mode</strong><br>
+                    Clear cookies/localStorage and visit <code>http://localhost:3000/buyer</code>.<br>
+                    Expected: Login/Register buttons should work in anonymous mode.
+                </div>
+            `;
+        }
+
+        // Auto-refresh test results every 5 seconds
+        setInterval(() => {
+            const results = document.getElementById('results-content');
+            if (results.innerHTML.includes('Run tests to see results')) {
+                results.innerHTML = `
+                    <div class="info">
+                        <strong>Ready for Testing</strong><br>
+                        The development server should be running at <code>http://localhost:3000</code><br>
+                        Click the test buttons above to see specific test scenarios.
+                    </div>
+                `;
+            }
+        }, 5000);
+    </script>
+</body>
+</html>

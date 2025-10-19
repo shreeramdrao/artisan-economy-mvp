@@ -6,6 +6,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
+import { fileTypeFromBuffer } from 'file-type';
 import { FirestoreService } from '../common/services/firestore.service';
 import { StorageService } from '../common/services/storage.service';
 import { VertexAiService } from '../common/services/vertex-ai.service';
@@ -13,8 +14,10 @@ import { VisionService } from '../common/services/vision.service';
 import { RemoveBgService } from '../common/services/remove-bg.service';
 import { CanvaService } from '../common/services/canva.service';
 import { SpeechService } from '../common/services/speech.service';
+import { AiMemoryService } from '../ai/ai.memory.service';
 import { UploadProductDto } from './dto/upload-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { CreateProductDto, CreateProductResponseDto } from './dto/create-product.dto';
 import {
   ProductUploadResponse,
   SellerProductsResponse,
@@ -35,7 +38,90 @@ export class SellerService {
     private readonly removeBgService: RemoveBgService,
     private readonly canvaService: CanvaService,
     private readonly speechService: SpeechService,
+    private readonly aiMemoryService: AiMemoryService,
   ) {}
+
+  /**
+   * Validates uploaded files for security and size constraints
+   */
+  private async validateUploadedFiles(
+    image: Express.Multer.File,
+    audioStory?: Express.Multer.File,
+  ): Promise<void> {
+    // Validate image file
+    if (!image?.buffer) {
+      throw new BadRequestException('Product image is required');
+    }
+
+    // Check image file size (5MB limit)
+    if (image.buffer.length > 5 * 1024 * 1024) {
+      throw new BadRequestException('Image file too large. Maximum size is 5MB.');
+    }
+
+    // Check minimum image size (1KB)
+    if (image.buffer.length < 1024) {
+      throw new BadRequestException('Image file too small. Minimum size is 1KB.');
+    }
+
+    // Validate image file type
+    try {
+      const imageFileType = await fileTypeFromBuffer(image.buffer);
+      if (!imageFileType) {
+        throw new BadRequestException('Unable to determine image file type.');
+      }
+
+      const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+      if (!allowedImageTypes.includes(imageFileType.mime)) {
+        throw new BadRequestException(
+          `Invalid image type: ${imageFileType.mime}. Allowed types: ${allowedImageTypes.join(', ')}`
+        );
+      }
+
+      this.logger.log(`Image validation passed: ${imageFileType.mime}, ${image.buffer.length} bytes`);
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      this.logger.error('Image file type validation failed:', error);
+      throw new BadRequestException('Invalid image file format.');
+    }
+
+    // Validate audio file if provided
+    if (audioStory?.buffer) {
+      // Check audio file size (10MB limit for audio)
+      if (audioStory.buffer.length > 10 * 1024 * 1024) {
+        throw new BadRequestException('Audio file too large. Maximum size is 10MB.');
+      }
+
+      // Check minimum audio size (1KB)
+      if (audioStory.buffer.length < 1024) {
+        throw new BadRequestException('Audio file too small. Minimum size is 1KB.');
+      }
+
+      // Validate audio file type
+      try {
+        const audioFileType = await fileTypeFromBuffer(audioStory.buffer);
+        if (!audioFileType) {
+          throw new BadRequestException('Unable to determine audio file type.');
+        }
+
+        const allowedAudioTypes = ['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/webm', 'audio/ogg'];
+        if (!allowedAudioTypes.includes(audioFileType.mime)) {
+          throw new BadRequestException(
+            `Invalid audio type: ${audioFileType.mime}. Allowed types: ${allowedAudioTypes.join(', ')}`
+          );
+        }
+
+        this.logger.log(`Audio validation passed: ${audioFileType.mime}, ${audioStory.buffer.length} bytes`);
+      } catch (error) {
+        if (error instanceof BadRequestException) {
+          throw error;
+        }
+        this.logger.error('Audio file type validation failed:', error);
+        throw new BadRequestException('Invalid audio file format.');
+      }
+    }
+  }
 
   // ------------------ UPLOAD PRODUCT ------------------
   async uploadProduct(
@@ -44,13 +130,12 @@ export class SellerService {
     audioStory?: Express.Multer.File,
   ): Promise<ProductUploadResponse> {
     try {
+      // Validate uploaded files first
+      await this.validateUploadedFiles(image, audioStory);
+
       const sellerId = (dto.sellerId || '').toString().trim();
       if (!sellerId) {
         throw new BadRequestException('Missing sellerId (seller must be authenticated)');
-      }
-
-      if (!image?.buffer) {
-        throw new BadRequestException('Product image is required');
       }
 
       if (!dto.title?.trim()) {
@@ -173,6 +258,15 @@ export class SellerService {
       await this.firestoreService.createDocument('products', productId, productData);
       await this.updateSellerProducts(sellerId, productId);
 
+      // 🧠 Store product embedding in AI memory system
+      try {
+        await this.aiMemoryService.addProductEmbedding(productData);
+        this.logger.log(`✅ Product embedding stored for: ${productData.title}`);
+      } catch (embeddingError) {
+        this.logger.warn(`⚠️ Failed to store product embedding for ${productData.title}:`, embeddingError);
+        // Don't fail the upload if embedding fails
+      }
+
       return {
         productId,
         status: 'uploaded',
@@ -184,6 +278,111 @@ export class SellerService {
       throw error instanceof BadRequestException || error instanceof NotFoundException
         ? error
         : new InternalServerErrorException('Failed to upload product');
+    }
+  }
+
+  // ------------------ CREATE PRODUCT (JSON) ------------------
+  async createProduct(dto: CreateProductDto & { sellerId: string; sellerName: string }): Promise<CreateProductResponseDto> {
+    try {
+      const sellerId = (dto.sellerId || '').toString().trim();
+      if (!sellerId) {
+        throw new BadRequestException('Missing sellerId (seller must be authenticated)');
+      }
+
+      if (!dto.name?.trim()) {
+        throw new BadRequestException('Product name is required');
+      }
+
+      if (typeof dto.price !== 'number' || dto.price < 0) {
+        throw new BadRequestException('Product price must be a non-negative number');
+      }
+
+      if (!dto.category?.trim()) {
+        throw new BadRequestException('Product category is required');
+      }
+
+      if (!dto.description?.trim()) {
+        throw new BadRequestException('Product description is required');
+      }
+
+      const productId = uuidv4();
+      this.logger.log(`Creating product=${productId} for seller=${sellerId}`);
+
+      // Ensure seller exists
+      await this.createOrUpdateSeller({ 
+        sellerId, 
+        sellerName: dto.sellerName || 'Artisan',
+        title: dto.name,
+        price: dto.price,
+        category: dto.category,
+        story: dto.description,
+        upiId: '', // Default empty for JSON creation
+      });
+
+      // Use provided image URL or default placeholder
+      const imageUrl = dto.image || 'https://via.placeholder.com/400x400/cccccc/666666?text=Product+Image';
+
+      const productData: any = {
+        id: productId,
+        sellerId,
+        sellerName: dto.sellerName || 'Artisan',
+        title: dto.name,
+        description: dto.description,
+        story: {
+          original: dto.description,
+          polished: {
+            en: dto.description,
+            hi: dto.description,
+            kn: dto.description,
+          },
+        },
+        images: {
+          original: imageUrl,
+          enhanced: imageUrl,
+          polished: imageUrl,
+        },
+        audio: {}, // No audio for JSON creation
+        price: {
+          amount: dto.price,
+          currency: 'INR',
+          suggested: null,
+        },
+        tags: [dto.category.toLowerCase()],
+        category: dto.category,
+        status: 'published',
+        paymentInfo: {
+          upiId: null,
+          hasBankAccount: false,
+        },
+        views: 0,
+        likes: 0,
+        rating: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // Save product to Firestore
+      await this.firestoreService.createDocument('products', productId, productData);
+      await this.updateSellerProducts(sellerId, productId);
+
+      // 🧠 Store product embedding in AI memory system
+      try {
+        await this.aiMemoryService.addProductEmbedding(productData);
+        this.logger.log(`🧠 Product embedded: ${productData.title}`);
+      } catch (embeddingError) {
+        this.logger.warn(`⚠️ Failed to store product embedding for ${productData.title}:`, embeddingError);
+        // Don't fail the creation if embedding fails
+      }
+
+      return {
+        message: '✅ Product uploaded and embedded successfully!',
+        product: productData,
+      };
+    } catch (error) {
+      this.logger.error('Error in createProduct:', error);
+      throw error instanceof BadRequestException
+        ? error
+        : new InternalServerErrorException('Failed to create product');
     }
   }
 
@@ -260,6 +459,16 @@ export class SellerService {
       }
 
       await this.firestoreService.updateDocument('products', productId, updates);
+
+      // 🧠 Update product embedding in AI memory system
+      try {
+        const updatedProduct = await this.firestoreService.getDocument('products', productId);
+        await this.aiMemoryService.updateProductEmbedding(updatedProduct);
+        this.logger.log(`✅ Product embedding updated for: ${updatedProduct.title}`);
+      } catch (embeddingError) {
+        this.logger.warn(`⚠️ Failed to update product embedding for ${productId}:`, embeddingError);
+        // Don't fail the update if embedding fails
+      }
 
       this.logger.log(`Product ${productId} updated successfully`);
       return {

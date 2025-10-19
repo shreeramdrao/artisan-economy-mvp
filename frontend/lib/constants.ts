@@ -5,18 +5,18 @@ export const LANGUAGES = [
 ] as const;
 
 export const PRODUCT_CATEGORIES = [
-  'Pottery',
-  'Textiles',
-  'Jewelry',
-  'Woodwork',
-  'Metalwork',
-  'Paintings',
-  'Sculptures',
-  'Handicrafts',
-  'Leather Goods',
-  'Home Decor',
-  'Traditional Wear',
-  'Accessories',
+  { id: 'pottery', name: 'Pottery' },
+  { id: 'textiles', name: 'Textiles' },
+  { id: 'jewelry', name: 'Jewelry' },
+  { id: 'woodwork', name: 'Woodwork' },
+  { id: 'metalwork', name: 'Metalwork' },
+  { id: 'paintings', name: 'Paintings' },
+  { id: 'sculptures', name: 'Sculptures' },
+  { id: 'handicrafts', name: 'Handicrafts' },
+  { id: 'leather-goods', name: 'Leather Goods' },
+  { id: 'home-decor', name: 'Home Decor' },
+  { id: 'traditional-wear', name: 'Traditional Wear' },
+  { id: 'accessories', name: 'Accessories' },
 ] as const;
 
 export const PRICE_RANGES = {

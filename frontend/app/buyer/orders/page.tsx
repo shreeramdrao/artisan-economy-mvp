@@ -32,7 +32,11 @@ export default function OrdersPage() {
         try {
           const data = await buyerApi.getOrders(id)
           console.log(`✅ Orders fetched for ${id}:`, data)
-          setOrders(data || [])
+          
+          // ✅ Handle PaginatedResponseDto structure
+          const ordersArray = data?.items || []
+          console.log(`📦 Extracted ${ordersArray.length} orders from response`)
+          setOrders(ordersArray)
           setLoading(false)
           return
         } catch (err: any) {
@@ -54,6 +58,12 @@ export default function OrdersPage() {
   return (
     <div className="container mx-auto px-4 py-10">
       <h1 className="text-3xl font-bold mb-6">My Orders</h1>
+
+      {/* ✅ Debug info */}
+      <div className="mb-4 p-2 bg-blue-50 text-xs text-blue-800 rounded">
+        Debug: orders.length = {orders.length}, orders type = {typeof orders}
+        {Array.isArray(orders) ? ' (array)' : ' (not array)'}
+      </div>
 
       {error && (
         <div className="text-red-600 mb-4">

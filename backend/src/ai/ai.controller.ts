@@ -85,4 +85,105 @@ export class AiController {
     // ✅ Calls updated AiService which delegates to VertexAiService
     return this.aiService.generateInstagramCaption(data.story, data.title);
   }
+
+  @Post('chat')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
+  @ApiOperation({ summary: 'AI chat assistant for product recommendations' })
+  @ApiResponse({
+    status: 200,
+    description: 'AI chat response with product recommendations',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', description: 'AI response message' },
+        products: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              price: { type: 'number' },
+              image: { type: 'string' },
+              category: { type: 'string' },
+              sellerName: { type: 'string' },
+              description: { type: 'string' },
+              tags: { type: 'array', items: { type: 'string' } }
+            }
+          }
+        },
+        timestamp: { type: 'string', format: 'date-time' }
+      }
+    }
+  })
+  async chat(@Body() data: { prompt: string; history?: any[] }) {
+    return this.aiService.chat(data.prompt, data.history);
+  }
+
+  @Post('query')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
+  @ApiOperation({ summary: 'Enhanced AI query handler with product memory' })
+  @ApiResponse({
+    status: 200,
+    description: 'AI response with relevant products from memory',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', description: 'AI response message' },
+        products: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              price: { type: 'number' },
+              image: { type: 'string' },
+              category: { type: 'string' },
+              sellerName: { type: 'string' },
+              description: { type: 'string' },
+              tags: { type: 'array', items: { type: 'string' } }
+            }
+          }
+        }
+      }
+    }
+  })
+  async handleUserQuery(@Body() data: { query: string; userId?: string }) {
+    return this.aiService.handleUserQuery(data.query, data.userId);
+  }
+
+  @Post('recommendations')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
+  @ApiOperation({ summary: 'Generate personalized product recommendations' })
+  @ApiResponse({
+    status: 200,
+    description: 'AI-generated product recommendations',
+  })
+  async getRecommendations(@Body() body: { userId?: string; history?: any[]; query?: string }) {
+    try {
+      const result = await this.aiService.getRecommendations(body.userId, body.history, body.query);
+      
+      // ✅ Ensure we always return { aiRecommendations: [] } structure
+      const aiRecommendations = result?.data?.products || [];
+      
+      return {
+        aiRecommendations: Array.isArray(aiRecommendations) ? aiRecommendations : [],
+        reasoning: result?.data?.reasoning || 'Personalized recommendations',
+        category: result?.data?.category || null,
+        total: result?.data?.total || 0
+      };
+    } catch (error) {
+      // ✅ Fallback to empty recommendations on error
+      return {
+        aiRecommendations: [],
+        reasoning: 'Unable to generate recommendations at this time',
+        category: null,
+        total: 0
+      };
+    }
+  }
 }

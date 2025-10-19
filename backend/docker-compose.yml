@@ -16,6 +16,7 @@ services:
       - VERTEX_AI_LOCATION=us-central1
       - VERTEX_AI_MODEL=gemini-pro
       - FRONTEND_URL=http://localhost:3000
+      - CHROMA_URL=http://chromadb:8000
     volumes:
       - ./service-account.json:/app/service-account.json:ro
       - ./src:/app/src
@@ -23,3 +24,15 @@ services:
     env_file:
       - .env
     command: npm run start:dev
+    depends_on:
+      - chromadb
+
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./chroma_data:/chroma/chroma
+    environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000

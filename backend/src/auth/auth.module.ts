@@ -4,6 +4,7 @@ import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { SetAuthCookieService } from './set-auth-cookie.service';
 import { FirestoreService } from '../common/services/firestore.service';
 import { JwtStrategy } from './jwt.strategy';
 
@@ -31,7 +32,7 @@ import { JwtStrategy } from './jwt.strategy';
   ],
 
   controllers: [AuthController],
-  providers: [AuthService, FirestoreService, JwtStrategy],
-  exports: [AuthService, JwtModule],
+  providers: [AuthService, SetAuthCookieService, FirestoreService, JwtStrategy],
+  exports: [AuthService, SetAuthCookieService, JwtModule],
 })
 export class AuthModule {}

@@ -25,6 +25,7 @@ import {
 import { SellerService } from './seller.service';
 import { UploadProductDto } from './dto/upload-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { CreateProductDto, CreateProductResponseDto } from './dto/create-product.dto';
 import {
   ProductUploadResponse,
   SellerProductsResponse,
@@ -103,6 +104,27 @@ export class SellerController {
         sellerName: user.name,
       },
       audioStory,
+    );
+  }
+
+  // ------------------ PRODUCT CREATION (JSON) ------------------
+  @Post('products')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a new product via JSON (no file upload)' })
+  @ApiResponse({ status: 201, type: CreateProductResponseDto })
+  async createProduct(
+    @Body() createProductDto: CreateProductDto,
+    @Req() req: Request,
+  ): Promise<CreateProductResponseDto> {
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+
+    return this.sellerService.createProduct(
+      {
+        ...createProductDto,
+        sellerId: user.email,
+        sellerName: user.name,
+      },
     );
   }
 

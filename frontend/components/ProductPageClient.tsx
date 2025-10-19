@@ -1,15 +1,27 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { formatPrice } from '@/lib/utils'
+import { motion } from 'framer-motion'
 import { useToast } from '@/components/ui/use-toast'
+import { Button } from '@/components/ui/button'
 import { buyerApi } from '@/lib/api'
 import { useCart } from '@/context/cart-context'
-import CaptionGenerator from '@/components/CaptionGenerator'
+import AIRecommendations from '@/components/buyer/ai-recommendations'
+import ProductZoomModal from '@/components/buyer/product-zoom-modal'
+import ChatAssistant from '@/components/buyer/chat-assistant'
+import CartSuggestions from '@/components/buyer/cart-suggestions'
+import QuickViewModal from '@/components/buyer/quick-view-modal'
+import FestivalBanner from '@/components/ui/festival-banner'
+import ScrollToTop from '@/components/ui/scroll-to-top'
+import { ConfettiProvider } from '@/components/providers/confetti-provider'
+import ProductImageSection from '@/components/buyer/product-image-section'
+import ProductDescriptionSection from '@/components/buyer/product-description-section'
+import ProductActionButtons from '@/components/buyer/product-action-buttons'
+import AudioPlayer from '@/components/ui/audio-player'
+import ttsService from '@/lib/tts-service'
+import RelatedProductsSection from '@/components/buyer/related-products-section'
+import ErrorBoundary from '@/components/ui/error-boundary'
 
 type Props = {
   productId: string
@@ -28,93 +40,377 @@ export default function ProductPageClient({ productId }: Props) {
   const [adding, setAdding] = useState(false)
   const [buying, setBuying] = useState(false)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [zoomModalOpen, setZoomModalOpen] = useState(false)
+  
+  // Auto-rotation state management
+  const [activeIndex, setActiveIndex] = useState(0)
+  const [isAutoRotating, setIsAutoRotating] = useState(true)
+  const [isPaused, setIsPaused] = useState(false)
+  
+  // Text-to-speech state management
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const [speechSupported, setSpeechSupported] = useState(false)
+  const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [isGeneratingTTS, setIsGeneratingTTS] = useState(false)
+  const [ttsError, setTtsError] = useState<string | null>(null)
+  
+  // Debounced progress update to prevent excessive re-renders
+  const progressTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const autoRotationRef = useRef<NodeJS.Timeout | null>(null)
+  const pauseTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const speechRef = useRef<SpeechSynthesisUtterance | null>(null)
+  
+  // Enhanced state management for error handling
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [notFound, setNotFound] = useState(false)
+  
+  // Debug state for V2 components
+  const [isChatOpen, setIsChatOpen] = useState(false)
+  const [quickViewProductId, setQuickViewProductId] = useState<string | null>(null)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const fallbackImg = '/placeholder.png'
 
   useEffect(() => {
     async function fetchProduct() {
+      if (!productId) {
+        setError('No product ID provided')
+        setLoading(false)
+        return
+      }
+
       try {
+        setLoading(true)
+        setError(null)
+        setNotFound(false)
+
+        console.log('🔍 Fetching product:', productId)
         const productData = await buyerApi.getProduct(productId)
+        
+        // Validate product data structure
+        if (!productData) {
+          console.warn('⚠️ Product data is null/undefined for ID:', productId)
+          setNotFound(true)
+          setLoading(false)
+          return
+        }
+
+        // Validate required fields
+        if (!productData.productId || !productData.title) {
+          console.warn('⚠️ Product missing required fields:', productData)
+          setNotFound(true)
+          setLoading(false)
+          return
+        }
+
+        console.log('✅ Product loaded successfully:', productData)
+        console.log('🔊 Audio URLs:', productData.audioUrls)
         setProduct(productData)
 
-        setSelectedImage(
-          productData.images?.polished ||
-          productData.images?.original ||
-          fallbackImg
-        )
+        // Safely set selected image with fallbacks
+        const imageUrl = productData.images?.polished ||
+                        productData.images?.original ||
+                        fallbackImg
+        setSelectedImage(imageUrl)
 
-        const relatedRes = await buyerApi.getProducts({ category: productData.category })
-        setRelatedProducts(
-          relatedRes.filter((p: any) => p.productId !== productData.productId)
-        )
-      } catch (err) {
+        // Fetch related products with error handling
+        try {
+          if (productData.category) {
+            const relatedRes = await buyerApi.getProducts({ category: productData.category })
+            setRelatedProducts(
+              (relatedRes || []).filter((p: any) => p?.productId !== productData.productId)
+            )
+          } else {
+            setRelatedProducts([])
+          }
+        } catch (relatedErr) {
+          console.warn('⚠️ Failed to load related products:', relatedErr)
+          setRelatedProducts([])
+        }
+
+      } catch (err: any) {
         console.error('❌ Failed to load product:', err)
+        
+        // Handle specific error types
+        if (err?.response?.status === 404 || err?.status === 404) {
+          setNotFound(true)
+        } else if (err?.response?.status === 500 || err?.status === 500) {
+          setError('Server error. Please try again later.')
+        } else {
+          setError('Failed to load product. Please try again.')
+        }
+      } finally {
+        setLoading(false)
       }
     }
-    if (productId) fetchProduct()
+
+    fetchProduct()
   }, [productId])
 
-  // ✅ Setup audio events
+  // Check for speech synthesis support and TTS API availability
   useEffect(() => {
-    if (audioRef.current) {
-      const audio = audioRef.current
-      const updateProgress = () => {
-        if (audio.duration > 0) {
-          setProgress((audio.currentTime / audio.duration) * 100)
+    if (typeof window !== 'undefined') {
+      const hasSpeechSynthesis = 'speechSynthesis' in window
+      setSpeechSupported(hasSpeechSynthesis)
+      
+      if (hasSpeechSynthesis) {
+        console.log('✅ Speech Synthesis API is supported')
+      } else {
+        console.warn('⚠️ Speech Synthesis API is not supported')
+      }
+      
+      // Test TTS API availability
+      fetch('/api/tts', { method: 'GET' })
+        .then(response => {
+          if (response.ok) {
+            console.log('✅ TTS API is available')
+          } else {
+            console.warn('⚠️ TTS API not available, will use browser fallback')
+          }
+        })
+        .catch(() => {
+          console.warn('⚠️ TTS API not reachable, will use browser fallback')
+        })
+    }
+  }, [])
+
+  // ✅ Setup audio events - Optimized to prevent frequent re-renders
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    const updateProgress = () => {
+      if (audio.duration > 0) {
+        const newProgress = (audio.currentTime / audio.duration) * 100
+        // Debounce progress updates to prevent excessive re-renders
+        if (progressTimeoutRef.current) {
+          clearTimeout(progressTimeoutRef.current)
         }
-      }
-      const resetOnEnd = () => {
-        setIsPlaying(false)
-        setProgress(0)
-      }
-      audio.addEventListener('timeupdate', updateProgress)
-      audio.addEventListener('ended', resetOnEnd)
-      return () => {
-        audio.removeEventListener('timeupdate', updateProgress)
-        audio.removeEventListener('ended', resetOnEnd)
+        progressTimeoutRef.current = setTimeout(() => {
+          setProgress(prev => Math.abs(prev - newProgress) > 0.5 ? newProgress : prev)
+        }, 100) // Update every 100ms instead of every frame
       }
     }
-  }, [audioRef.current])
+    
+    const resetOnEnd = () => {
+      setIsPlaying(false)
+      setProgress(0)
+    }
 
-  const handlePlayAudio = () => {
-    if (!product?.audioUrls?.[selectedLanguage]) {
+    const handleError = (e: Event) => {
+      console.error('Audio playback error:', e)
+      setIsPlaying(false)
+      setProgress(0)
       toast({
-        title: 'No Audio Available',
-        description: 'This artisan story has no audio in the selected language',
+        title: 'Audio Error',
+        description: 'Failed to play audio. Please try again.',
+        variant: 'destructive',
+      })
+    }
+
+    const handleLoadStart = () => {
+      console.log('Audio loading started')
+    }
+
+    const handleCanPlay = () => {
+      console.log('Audio can play')
+    }
+
+    audio.addEventListener('timeupdate', updateProgress)
+    audio.addEventListener('ended', resetOnEnd)
+    audio.addEventListener('error', handleError)
+    audio.addEventListener('loadstart', handleLoadStart)
+    audio.addEventListener('canplay', handleCanPlay)
+    
+    return () => {
+      audio.removeEventListener('timeupdate', updateProgress)
+      audio.removeEventListener('ended', resetOnEnd)
+      audio.removeEventListener('error', handleError)
+      audio.removeEventListener('loadstart', handleLoadStart)
+      audio.removeEventListener('canplay', handleCanPlay)
+      // Clear any pending timeout
+      if (progressTimeoutRef.current) {
+        clearTimeout(progressTimeoutRef.current)
+      }
+    }
+  }, [toast]) // Depend on toast function
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+    }
+  }, [])
+
+  // Memoize image array for auto-rotation (moved before useEffect that uses it)
+  const imageArray = useMemo(() => {
+    if (!product?.images) {
+      return [fallbackImg]
+    }
+    
+    const images = []
+    if (product.images.original) images.push(product.images.original)
+    if (product.images.polished) images.push(product.images.polished)
+    if (product.images.enhanced) images.push(product.images.enhanced)
+    
+    return images.length > 0 ? images : [fallbackImg]
+  }, [product?.images, fallbackImg])
+
+  // Auto-rotation effect
+  useEffect(() => {
+    // Only start auto-rotation if we have more than one image and auto-rotation is enabled
+    if (imageArray.length <= 1 || !isAutoRotating || isPaused) {
+      return
+    }
+
+    const startAutoRotation = () => {
+      autoRotationRef.current = setInterval(() => {
+        setActiveIndex(prev => (prev + 1) % imageArray.length)
+      }, 2000)
+    }
+
+    startAutoRotation()
+
+    return () => {
+      if (autoRotationRef.current) {
+        clearInterval(autoRotationRef.current)
+        autoRotationRef.current = null
+      }
+    }
+  }, [imageArray.length, isAutoRotating, isPaused])
+
+  // Update selectedImage when activeIndex changes
+  useEffect(() => {
+    if (imageArray.length > 0) {
+      setSelectedImage(imageArray[activeIndex])
+    }
+  }, [activeIndex, imageArray])
+
+  // Cleanup timeouts and speech on unmount
+  useEffect(() => {
+    return () => {
+      if (autoRotationRef.current) {
+        clearInterval(autoRotationRef.current)
+      }
+      if (pauseTimeoutRef.current) {
+        clearTimeout(pauseTimeoutRef.current)
+      }
+      // Stop any ongoing speech synthesis
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel()
+      }
+    }
+  }, [])
+
+  const handlePlayAudio = useCallback(async () => {
+    if (!product) {
+      toast({
+        title: 'No Product Data',
+        description: 'Product information is not available.',
         variant: 'destructive',
       })
       return
     }
 
-    if (!audioRef.current) {
-      audioRef.current = new Audio(product.audioUrls[selectedLanguage])
+    // Get the text to be read
+    const textToRead = product.story?.polished?.[selectedLanguage] || 
+                      product.story?.original || 
+                      product.description || 
+                      'No story available for this product.'
+
+    if (!textToRead || textToRead.trim() === '') {
+      toast({
+        title: 'No Text Available',
+        description: 'There is no story or description to read aloud.',
+        variant: 'destructive',
+      })
+      return
     }
 
-    if (isPlaying) {
-      audioRef.current.pause()
-      setIsPlaying(false)
-    } else {
-      if (audioRef.current.src !== product.audioUrls[selectedLanguage]) {
-        audioRef.current.pause()
-        audioRef.current = new Audio(product.audioUrls[selectedLanguage])
+    try {
+      // If we already have audio for this text, just play it
+      if (audioUrl && !isGeneratingTTS) {
+        setIsSpeaking(!isSpeaking)
+        return
       }
-      audioRef.current.play()
-      setIsPlaying(true)
-    }
-  }
 
-  const handleLanguageChange = (lang: 'en' | 'hi' | 'kn') => {
+      // Generate TTS audio
+      setIsGeneratingTTS(true)
+      setTtsError(null)
+      
+      console.log('🎤 Generating AI voice for:', textToRead.substring(0, 100) + '...')
+      
+      const languageCode = ttsService.getLanguageCode(selectedLanguage)
+      
+      const result = await ttsService.generateSpeech({
+        text: textToRead,
+        language: languageCode,
+        voice: ttsService.getVoiceForLanguage(languageCode)
+      })
+
+      setAudioUrl(result.audioUrl)
+      setIsGeneratingTTS(false)
+      setIsSpeaking(true)
+      
+      console.log('✅ AI voice generated successfully')
+
+    } catch (error) {
+      console.error('❌ TTS generation failed:', error)
+      setIsGeneratingTTS(false)
+      setTtsError(error instanceof Error ? error.message : 'Failed to generate AI voice')
+      
+      // Fallback to browser speech synthesis
+      if (speechSupported) {
+        console.log('🔄 Falling back to browser speech synthesis')
+        
+        const languageCode = ttsService.getLanguageCode(selectedLanguage)
+        
+        const utterance = new SpeechSynthesisUtterance(textToRead)
+        utterance.lang = languageCode
+        utterance.rate = 0.9
+        utterance.pitch = 1.0
+        utterance.volume = 1.0
+
+        utterance.onstart = () => setIsSpeaking(true)
+        utterance.onend = () => setIsSpeaking(false)
+        utterance.onerror = () => setIsSpeaking(false)
+
+        window.speechSynthesis.cancel()
+        window.speechSynthesis.speak(utterance)
+        
+        toast({
+          title: 'Using Browser Voice',
+          description: 'AI voice unavailable, using browser text-to-speech instead.',
+          variant: 'default',
+        })
+      } else {
+        toast({
+          title: 'Voice Not Available',
+          description: 'Neither AI voice nor browser speech synthesis is available.',
+          variant: 'destructive',
+        })
+      }
+    }
+  }, [product, selectedLanguage, audioUrl, isGeneratingTTS, isSpeaking, speechSupported, toast])
+
+  const handleLanguageChange = useCallback((lang: 'en' | 'hi' | 'kn') => {
     setSelectedLanguage(lang)
-    if (audioRef.current) {
-      audioRef.current.pause()
-      audioRef.current = new Audio(product?.audioUrls?.[lang] || '')
-      setIsPlaying(false)
-      setProgress(0)
+    
+    // Stop current speech and clear audio URL when switching languages
+    if (isSpeaking) {
+      setIsSpeaking(false)
     }
-  }
+    
+    // Clear the current audio URL so new TTS will be generated for the new language
+    setAudioUrl(null)
+    setTtsError(null)
+  }, [isSpeaking])
 
-  const handleAddToCart = async () => {
+  const handleAddToCart = useCallback(async () => {
     if (!product) return
     try {
       setAdding(true)
@@ -133,170 +429,240 @@ export default function ProductPageClient({ productId }: Props) {
     } finally {
       setAdding(false)
     }
-  }
+  }, [product, addToCart, toast])
 
-  const handleBuyNow = () => {
+  const handleBuyNow = useCallback(() => {
     if (!product) return
     setBuying(true)
     router.push(`/buyer/checkout?productId=${product.productId}&quantity=1`)
+  }, [product, router])
+
+  // Memoize thumbnails with defensive programming - ALWAYS called
+  const thumbnails = useMemo(() => {
+    if (!product?.images) {
+      return [
+        { src: fallbackImg, label: 'Original' },
+        { src: fallbackImg, label: 'Polished' },
+      ]
+    }
+    
+    return [
+      { src: product.images.original || fallbackImg, label: 'Original' },
+      { src: product.images.polished || fallbackImg, label: 'Polished' },
+    ]
+  }, [product?.images?.original, product?.images?.polished, fallbackImg])
+
+  const productUrl = useMemo(() => {
+    if (!product?.productId) return ''
+    return `${process.env.NEXT_PUBLIC_FRONTEND_URL || ''}/buyer/product/${product.productId}`
+  }, [product?.productId])
+
+  // Memoized callbacks - ALWAYS called
+  const handleImageClick = useCallback(() => setZoomModalOpen(true), [])
+  
+  const handleThumbnailClick = useCallback((src: string) => {
+    // Find the index of the clicked image
+    const clickedIndex = imageArray.findIndex(img => img === src)
+    if (clickedIndex !== -1) {
+      setActiveIndex(clickedIndex)
+    }
+    
+    // Pause auto-rotation for 10 seconds
+    setIsPaused(true)
+    
+    // Clear any existing pause timeout
+    if (pauseTimeoutRef.current) {
+      clearTimeout(pauseTimeoutRef.current)
+    }
+    
+    // Resume auto-rotation after 10 seconds
+    pauseTimeoutRef.current = setTimeout(() => {
+      setIsPaused(false)
+    }, 10000)
+  }, [imageArray])
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50 to-orange-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-orange-200 border-t-orange-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 text-lg">Loading product...</p>
+        </div>
+      </div>
+    )
   }
 
-  if (!product) return <p className="p-8 text-center">Loading product...</p>
-
-  const thumbnails = [
-    { src: product.images?.original || fallbackImg, label: 'Original' },
-    { src: product.images?.polished || fallbackImg, label: 'Polished' },
-  ]
-
-  const productUrl = `${process.env.NEXT_PUBLIC_FRONTEND_URL || ''}/buyer/product/${product.productId}`
-
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="grid lg:grid-cols-2 gap-8 mb-12">
-        {/* Product Images */}
-        <div className="space-y-4">
-          <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden">
-            <img
-              src={selectedImage || fallbackImg}
-              alt={product.title}
-              className="w-full h-full object-cover"
-            />
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50 to-orange-50 flex items-center justify-center">
+        <div className="max-w-md mx-auto text-center p-8">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-red-600 text-2xl">⚠️</span>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            {thumbnails.map((thumb) => (
-              <img
-                key={thumb.label}
-                src={thumb.src}
-                alt={thumb.label}
-                onClick={() => setSelectedImage(thumb.src)}
-                className={`w-full aspect-square object-cover rounded cursor-pointer transition ${
-                  selectedImage === thumb.src ? 'ring-2 ring-amber-500' : ''
-                }`}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Product Details */}
-        <div className="space-y-6">
-          <h1 className="text-3xl font-bold mb-2">{product.title}</h1>
-
-          {/* ✅ Seller Info with Avatar */}
-          <div className="flex items-center space-x-4 text-gray-600">
-            <img
-              src={product.sellerInfo?.avatarUrl || '/images/default-avatar.png'}
-              alt={product.sellerInfo?.name || 'Artisan'}
-              className="w-12 h-12 rounded-full object-cover border"
-            />
-            <div>
-              <p className="font-semibold">{product.sellerInfo?.name}</p>
-              <p className="text-sm">{product.sellerInfo?.location || 'India'}</p>
-              {product.sellerInfo?.bio && (
-                <p className="text-xs text-gray-500">{product.sellerInfo.bio}</p>
-              )}
-            </div>
-          </div>
-
-          <div className="text-3xl font-bold text-amber-600">
-            {formatPrice(product.price)}
-          </div>
-
-          {/* ✅ Story + Audio */}
-          <Card className="p-6 bg-amber-50">
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="text-lg font-semibold">Artisan's Story</h3>
-              <div className="flex items-center space-x-2">
-                <select
-                  value={selectedLanguage}
-                  onChange={(e) =>
-                    handleLanguageChange(e.target.value as 'en' | 'hi' | 'kn')
-                  }
-                  className="text-sm border rounded px-2 py-1"
-                >
-                  <option value="en">English</option>
-                  <option value="hi">हिंदी</option>
-                  <option value="kn">ಕನ್ನಡ</option>
-                </select>
-                <Button size="sm" variant="outline" onClick={handlePlayAudio}>
-                  {isPlaying ? '⏸️ Pause' : '▶️ Listen'}
-                </Button>
-              </div>
-            </div>
-
-            <p className="text-gray-700 leading-relaxed mb-4">
-              {product.story?.polished?.[selectedLanguage] ||
-                product.story?.original ||
-                'No story available'}
-            </p>
-
-            {product.audioUrls?.[selectedLanguage] && (
-              <div className="w-full bg-gray-200 rounded h-2">
-                <div
-                  className="bg-amber-500 h-2 rounded"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            )}
-          </Card>
-
-          {/* ---------------- Caption Generator ---------------- */}
-          <div className="mt-4">
-            <CaptionGenerator
-              title={product.title}
-              description={
-                product.story?.polished?.[selectedLanguage] ||
-                product.description ||
-                ''
-              }
-              imageUrl={selectedImage || product.images?.polished || fallbackImg}
-              productUrl={productUrl}
-            />
-          </div>
-
-          <div className="flex space-x-4">
-            <Button size="lg" className="flex-1" onClick={handleBuyNow} disabled={buying}>
-              {buying ? 'Redirecting...' : 'Buy Now'}
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="flex-1"
-              onClick={handleAddToCart}
-              disabled={adding}
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Error Loading Product</h1>
+          <p className="text-gray-600 mb-6">{error}</p>
+          <div className="space-y-3">
+            <Button 
+              onClick={() => window.location.reload()}
+              className="w-full bg-orange-600 hover:bg-orange-700 text-white"
             >
-              {adding ? 'Adding...' : 'Add to Cart'}
+              Try Again
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={() => router.push('/buyer')}
+              className="w-full"
+            >
+              Back to Products
             </Button>
           </div>
         </div>
       </div>
+    )
+  }
 
-      {/* Related Products */}
-      {relatedProducts.length > 0 && (
-        <div className="border-t pt-12">
-          <h2 className="text-2xl font-bold mb-6">You Might Also Like</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {relatedProducts.map((item) => (
-              <Link key={item.productId} href={`/buyer/product/${item.productId}`}>
-                <Card className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer">
-                  <div className="aspect-square bg-gray-100">
-                    <img
-                      src={item.imageUrl || fallbackImg}
-                      alt={item.title}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="p-3">
-                    <h3 className="font-medium text-sm mb-1">{item.title}</h3>
-                    <div className="text-lg font-bold text-amber-600">
-                      {formatPrice(item.price)}
-                    </div>
-                  </div>
-                </Card>
-              </Link>
-            ))}
+  // Not found state
+  if (notFound || !product) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50 to-orange-50 flex items-center justify-center">
+        <div className="max-w-md mx-auto text-center p-8">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-gray-600 text-2xl">🔍</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Product Not Found</h1>
+          <p className="text-gray-600 mb-6">
+            The product you&apos;re looking for doesn&apos;t exist or has been removed.
+          </p>
+          <div className="space-y-3">
+            <Button 
+              onClick={() => router.push('/buyer')}
+              className="w-full bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              Browse Products
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={() => window.history.back()}
+              className="w-full"
+            >
+              Go Back
+            </Button>
           </div>
         </div>
+      </div>
+    )
+  }
+
+  return (
+    <ErrorBoundary>
+      <ConfettiProvider>
+      <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50 to-orange-50">
+        <div className="container mx-auto px-6 py-12 max-w-7xl">
+          {/* Main Product Section - Refined Layout */}
+          <motion.div 
+            className="grid lg:grid-cols-2 gap-12 lg:gap-20 mb-20"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            key={`product-${product?.productId || 'loading'}`} // Stable key to prevent re-animation
+          >
+            {/* Product Images Section */}
+            <ProductImageSection
+              selectedImage={selectedImage || fallbackImg}
+              thumbnails={thumbnails}
+              productTitle={product?.title || 'Product'}
+              fallbackImg={fallbackImg}
+              onImageClick={handleImageClick}
+              onThumbnailClick={handleThumbnailClick}
+              activeIndex={activeIndex}
+              imageArray={imageArray}
+              isPaused={isPaused}
+            />
+
+            {/* Product Details Section */}
+            <div className="space-y-10">
+              <ProductDescriptionSection
+                product={product}
+                selectedLanguage={selectedLanguage}
+                isPlaying={isSpeaking}
+                progress={0}
+                productUrl={productUrl}
+                selectedImage={selectedImage}
+                fallbackImg={fallbackImg}
+                onLanguageChange={handleLanguageChange}
+                onPlayAudio={handlePlayAudio}
+                speechSupported={speechSupported}
+                audioUrl={audioUrl}
+                isGeneratingTTS={isGeneratingTTS}
+                ttsError={ttsError}
+              />
+
+              {/* Action Buttons */}
+              <ProductActionButtons
+                adding={adding}
+                buying={buying}
+                onAddToCart={handleAddToCart}
+                onBuyNow={handleBuyNow}
+              />
+            </div>
+          </motion.div>
+        </div>
+
+      {/* AI Recommendations - Development Only */}
+      {process.env.NODE_ENV === 'development' && (
+        <AIRecommendations 
+          currentProduct={{
+            productId: product.productId,
+            category: product.category,
+            price: product.price,
+            sellerName: product.sellerInfo?.name
+          }}
+        />
       )}
+
+        {/* Related Products Section */}
+        <RelatedProductsSection
+          relatedProducts={relatedProducts}
+          fallbackImg={fallbackImg}
+        />
+
+      {/* Product Zoom Modal */}
+      <ProductZoomModal
+        imageUrl={selectedImage || fallbackImg}
+        alt={product.title}
+        isOpen={zoomModalOpen}
+        onClose={() => setZoomModalOpen(false)}
+      />
+
+      {/* Chat Assistant */}
+      <ChatAssistant isOpen={isChatOpen} onToggle={() => setIsChatOpen(!isChatOpen)} />
+
+      {/* Cart Suggestions */}
+      <CartSuggestions cartItems={[]} />
+
+      {/* Quick View Modal */}
+      <QuickViewModal
+        productId={quickViewProductId}
+        isOpen={!!quickViewProductId}
+        onClose={() => setQuickViewProductId(null)}
+      />
+
+      {/* Festival Banner */}
+      <FestivalBanner festival={{
+        name: 'Diwali',
+        date: '2024-11-01',
+        color: 'from-orange-500 to-yellow-500',
+        icon: '🪔',
+        message: 'Celebrate the festival of lights with handcrafted treasures',
+        discount: '20%'
+      }} />
+
+      {/* Scroll to Top */}
+      <ScrollToTop />
     </div>
+    </ConfettiProvider>
+    </ErrorBoundary>
   )
 }

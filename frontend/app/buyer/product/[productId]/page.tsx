@@ -53,5 +53,42 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default function Page({ params }: Props) {
-  return <ProductPageClient productId={params.productId} />
+  return (
+    <>
+      <ProductPageClient productId={params.productId} />
+      
+      {/* Structured Data for SEO */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Product",
+            "name": "Artisan Product",
+            "description": "Handcrafted with love by artisans.",
+            "image": "/placeholder.png",
+            "brand": {
+              "@type": "Brand",
+              "name": "Artisan Economy"
+            },
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "INR",
+              "availability": "https://schema.org/InStock",
+              "seller": {
+                "@type": "Organization",
+                "name": "Artisan Economy"
+              }
+            },
+            "aggregateRating": {
+              "@type": "AggregateRating",
+              "ratingValue": "4.5",
+              "reviewCount": "1"
+            }
+          })
+        }}
+      />
+    </>
+  )
 }

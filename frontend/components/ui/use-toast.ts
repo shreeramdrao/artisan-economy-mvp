@@ -178,9 +178,38 @@ function useToast() {
     }
   }, [state])
 
+  const toastSuccess = (message: string, title?: string) => {
+    return toast({
+      title: title || 'Success',
+      description: message,
+      variant: 'default',
+      className: 'border-green-500 bg-green-50 text-green-900',
+    })
+  }
+
+  const toastError = (message: string, title?: string) => {
+    return toast({
+      title: title || 'Error',
+      description: message,
+      variant: 'destructive',
+    })
+  }
+
+  const toastWarning = (message: string, title?: string) => {
+    return toast({
+      title: title || 'Warning',
+      description: message,
+      variant: 'default',
+      className: 'border-yellow-500 bg-yellow-50 text-yellow-900',
+    })
+  }
+
   return {
     ...state,
     toast,
+    toastSuccess,
+    toastError,
+    toastWarning,
     dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
   }
 }

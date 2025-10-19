@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -11,34 +11,63 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { PRODUCT_CATEGORIES } from '@/lib/constants'
-import { buyerApi } from '@/lib/api'
-import ProductCard from '@/components/seller/product-card' // ⚠️ Consider moving to /components/product
+import ProductCard from '@/components/buyer/product-card'
+import ProductCardSkeleton from '@/components/buyer/product-card-skeleton'
+import QuickViewModal from '@/components/buyer/quick-view-modal'
 import { formatPrice } from '@/lib/utils'
+import { Search, Filter, Sparkles, Heart, Star } from 'lucide-react'
+import PersonalizedFeed from '@/components/buyer/personalized-feed'
+import ChatAssistant from '@/components/buyer/chat-assistant'
+import CartSuggestions from '@/components/buyer/cart-suggestions'
+import AIRecommendations from '@/components/buyer/ai-recommendations'
+import ProductZoomModal from '@/components/buyer/product-zoom-modal'
+import FestivalBanner from '@/components/ui/festival-banner'
+import ScrollToTop from '@/components/ui/scroll-to-top'
+import { ConfettiProvider } from '@/components/providers/confetti-provider'
+import { Card } from '@/components/ui/card'
+import { useCart } from '@/context/cart-context'
+import { useProductsInfinite } from '@/hooks/use-products'
 
 export default function BuyerCatalog() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
-  const [products, setProducts] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [quickViewProductId, setQuickViewProductId] = useState<string | null>(null)
+  
+  // Debug state for V2 components
+  const [isChatOpen, setIsChatOpen] = useState(false)
+  const [zoomModalOpen, setZoomModalOpen] = useState(false)
 
-  useEffect(() => {
-    async function fetchProducts() {
-      try {
-        const data = await buyerApi.getProducts()
-        setProducts(data || [])
-      } catch (err) {
-        console.error('Failed to load products:', err)
-        setError('Failed to load products')
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchProducts()
+  // Get cart items for suggestions
+  const { cart } = useCart()
+
+  // Use the new pagination hook
+  const {
+    products,
+    pagination,
+    isLoading,
+    isLoadingMore,
+    error,
+    hasMore,
+    loadMore,
+    reset,
+  } = useProductsInfinite({
+    category: selectedCategory === 'all' ? undefined : selectedCategory,
+    limit: 12,
+  })
+
+  const handleCategoryChange = useCallback((category: string) => {
+    setSelectedCategory(category)
+    reset() // Reset pagination when category changes
+  }, [reset])
+
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query)
+    // TODO: Implement search functionality
   }, [])
 
   const filteredProducts = products.filter((product) => {
     const matchesSearch =
+      searchQuery === '' ||
       product.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.sellerName?.toLowerCase().includes(searchQuery.toLowerCase())
 
@@ -48,104 +77,173 @@ export default function BuyerCatalog() {
     return matchesSearch && matchesCategory
   })
 
-  if (loading) {
-    return <p className="p-8 text-center">Loading products...</p>
+  const currentFestival = {
+    name: 'Diwali',
+    date: '2024-11-01',
+    color: 'from-orange-500 to-yellow-500',
+    icon: '🪔',
+    message: 'Celebrate the festival of lights with handcrafted treasures',
+    discount: '20%',
   }
 
   if (error) {
-    return <p className="p-8 text-center text-red-600">{error}</p>
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Something went wrong</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <Button onClick={() => reset()}>Try Again</Button>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Hero Section */}
-      <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg p-8 mb-8">
-        <h1 className="text-4xl font-bold mb-4">Discover Authentic Indian Crafts</h1>
-        <p className="text-lg text-gray-700 mb-6">
-          Support artisans directly. Every purchase preserves traditional craftsmanship.
-        </p>
+    <ConfettiProvider>
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-orange-50">
+        {/* Festival Banner */}
+        <FestivalBanner festival={currentFestival} />
 
-        {/* Search and Filters */}
-        <div className="flex flex-col md:flex-row gap-4">
-          <Input
-            placeholder="Search products or artisans..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="md:flex-1 bg-white"
-          />
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="md:w-48 bg-white">
-              <SelectValue placeholder="All Categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {PRODUCT_CATEGORIES.map((category) => (
-                <SelectItem key={category} value={category}>
-                  {category}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Header */}
+        <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-sm border-b border-gray-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              {/* Search and Filters */}
+              <div className="flex flex-col sm:flex-row gap-4 flex-1">
+                <div className="relative flex-1 max-w-md">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Input
+                    placeholder="Search products..."
+                    value={searchQuery}
+                    onChange={(e) => handleSearch(e.target.value)}
+                    className="pl-10 bg-white/80 backdrop-blur-sm border-gray-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
+                  />
+                </div>
+                
+                <Select value={selectedCategory} onValueChange={handleCategoryChange}>
+                  <SelectTrigger className="w-full sm:w-48 bg-white/80 backdrop-blur-sm border-gray-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-500 focus:ring-offset-2">
+                    <SelectValue placeholder="All Categories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {PRODUCT_CATEGORIES.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Stats */}
+              <div className="flex items-center gap-4 text-sm text-gray-600">
+                <span className="flex items-center gap-1">
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                  {pagination?.total || 0} Products
+                </span>
+                {pagination && (
+                  <span>
+                    Page {pagination.page} of {pagination.totalPages}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Category Quick Links */}
-      <div className="flex flex-wrap gap-2 mb-8">
-        {['all', 'Textiles', 'Pottery', 'Jewelry', 'Paintings', 'Woodwork'].map(
-          (cat) => (
-            <Button
-              key={cat}
-              variant={selectedCategory === cat ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setSelectedCategory(cat)}
-            >
-              {cat === 'all' ? 'All' : cat}
-            </Button>
-          ),
-        )}
-      </div>
+        {/* Main Content */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Personalized Feed */}
+          <div className="mb-8">
+            <PersonalizedFeed />
+          </div>
 
-      {/* Products Grid */}
-      {filteredProducts.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
-          {filteredProducts.map((product) => (
-            <ProductCard
-              key={product.productId}
-              productId={product.productId}
-              title={product.title || 'Untitled Product'}
-              sellerName={product.sellerName || 'Artisan'}
-              location={product.location || 'India'}
-              price={product.price || 0}
-              imageUrl={
-                product.images?.polished ||
-                product.images?.enhanced ||
-                product.images?.original ||
-                product.imageUrl || // fallback for older API
-                '/placeholder.png'
-              }
-              rating={product.rating || 4.5}
+          {/* AI Recommendations */}
+          <div className="mb-8">
+            <AIRecommendations 
+              currentProduct={{
+                productId: "sample-product",
+                category: "pottery",
+                price: 1500,
+                sellerName: "Sample Artisan"
+              }}
             />
-          ))}
-        </div>
-      ) : (
-        <p className="text-center text-gray-500">No products found.</p>
-      )}
+          </div>
 
-      {/* Load More */}
-      {products.length > filteredProducts.length && (
-        <div className="text-center">
-          <Button
-            variant="outline"
-            size="lg"
-            onClick={() => {
-              // Future pagination logic
-              console.log('Load more clicked')
-            }}
-          >
-            Load More Products
-          </Button>
+          {/* Products Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+            {isLoading ? (
+              // Loading skeletons
+              Array.from({ length: 12 }).map((_, i) => (
+                <ProductCardSkeleton key={i} />
+              ))
+            ) : (
+              filteredProducts.map((product) => (
+                <ProductCard
+                  key={product.productId}
+                  productId={product.productId}
+                  title={product.title}
+                  price={product.price}
+                  imageUrl={product.imageUrl}
+                  sellerName={product.sellerName}
+                  rating={product.rating}
+                  onQuickView={setQuickViewProductId}
+                />
+              ))
+            )}
+          </div>
+
+          {/* Load More Button */}
+          {hasMore && (
+            <div className="text-center mb-8">
+              <Button
+                onClick={loadMore}
+                disabled={isLoadingMore}
+                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-8 py-3 rounded-full font-medium shadow-lg hover:shadow-xl transition-all duration-300"
+              >
+                {isLoadingMore ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Loading...
+                  </>
+                ) : (
+                  'Load More Products'
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Cart Suggestions */}
+          <div className="mb-8">
+            <CartSuggestions cartItems={cart} />
+          </div>
         </div>
-      )}
-    </div>
+
+        {/* Modals */}
+        {quickViewProductId && (
+          <QuickViewModal
+            productId={quickViewProductId}
+            isOpen={!!quickViewProductId}
+            onClose={() => setQuickViewProductId(null)}
+          />
+        )}
+
+        {zoomModalOpen && (
+          <ProductZoomModal
+            imageUrl="/images/sample-product.jpg"
+            alt="Product zoom"
+            isOpen={zoomModalOpen}
+            onClose={() => setZoomModalOpen(false)}
+          />
+        )}
+
+        {/* Floating Components */}
+        <ScrollToTop />
+        <ChatAssistant
+          isOpen={isChatOpen}
+          onToggle={() => setIsChatOpen(!isChatOpen)}
+        />
+      </div>
+    </ConfettiProvider>
   )
 }

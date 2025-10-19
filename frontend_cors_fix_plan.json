@@ -1,0 +1,104 @@
+{
+  "fix_plan": {
+    "title": "Frontend CORS Fix Plan - Content Security Policy Update",
+    "description": "Fix CORS issues by updating Next.js Content Security Policy to allow ngrok domains",
+    "root_cause": "Content Security Policy in next.config.js is blocking ngrok requests",
+    "priority": "high",
+    "estimated_time": "5 minutes",
+    "files_to_modify": [
+      {
+        "file_path": "/Users/shreeramads/artisan-economy-mvp/frontend/next.config.js",
+        "action": "update",
+        "description": "Update Content Security Policy to allow ngrok domains",
+        "changes": [
+          {
+            "line_number": 86,
+            "change_type": "replace",
+            "old_code": "{ key: 'Content-Security-Policy', value: \"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';\" }",
+            "new_code": "{ key: 'Content-Security-Policy', value: \"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: *.ngrok.io *.ngrok-free.app; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';\" }",
+            "reason": "Add ngrok domains to connect-src directive to allow API requests"
+          }
+        ]
+      }
+    ],
+    "alternative_fix": {
+      "description": "Environment-aware CSP (recommended for production safety)",
+      "file_path": "/Users/shreeramads/artisan-economy-mvp/frontend/next.config.js",
+      "action": "replace_function",
+      "function_name": "headers",
+      "new_implementation": "async headers() {\n  const isDev = process.env.NODE_ENV === 'development';\n  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;\n  \n  // Extract domain from backend URL for CSP\n  let connectSrc = \"'self' https:\";\n  if (isDev && backendUrl) {\n    try {\n      const url = new URL(backendUrl);\n      connectSrc += ` ${url.origin}`;\n    } catch (e) {\n      // Fallback for ngrok\n      connectSrc += \" *.ngrok.io *.ngrok-free.app\";\n    }\n  }\n\n  return [\n    {\n      source: '/(.*)',\n      headers: [\n        { \n          key: 'Content-Security-Policy', \n          value: `default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src ${connectSrc}; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';` \n        },\n        { key: 'X-Frame-Options', value: 'DENY' },\n        { key: 'X-Content-Type-Options', value: 'nosniff' },\n        { key: 'Referrer-Policy', value: 'origin-when-cross-origin' },\n        {\n          key: 'Permissions-Policy',\n          value: 'camera=(), microphone=(), geolocation=()',\n        },\n      ],\n    },\n    {\n      source: '/images/(.*)',\n      headers: [\n        {\n          key: 'Cache-Control',\n          value: 'public, max-age=31536000, immutable',\n        },\n      ],\n    },\n    {\n      source: '/_next/static/(.*)',\n      headers: [\n        {\n          key: 'Cache-Control',\n          value: 'public, max-age=31536000, immutable',\n        },\n      ],\n    },\n  ];\n}"
+    },
+    "validation_steps": [
+      {
+        "step": 1,
+        "action": "clear_browser_cache",
+        "description": "Clear browser cache completely (CSP headers are cached aggressively)"
+      },
+      {
+        "step": 2,
+        "action": "restart_dev_server",
+        "description": "Restart Next.js development server with 'npm run dev'"
+      },
+      {
+        "step": 3,
+        "action": "test_cart_requests",
+        "description": "Open browser DevTools Network tab and test cart API calls"
+      },
+      {
+        "step": 4,
+        "action": "verify_cookies",
+        "description": "Check that 'token' and 'authUser' cookies are being sent with requests"
+      },
+      {
+        "step": 5,
+        "action": "test_login_flow",
+        "description": "Complete full authentication cycle (login → dashboard → cart)"
+      },
+      {
+        "step": 6,
+        "action": "check_console",
+        "description": "Verify no CORS errors appear in browser console"
+      }
+    ],
+    "rollback_plan": {
+      "description": "If fix causes issues, revert the CSP change",
+      "steps": [
+        "Revert next.config.js to original CSP",
+        "Clear browser cache",
+        "Restart dev server"
+      ]
+    },
+    "production_considerations": {
+      "safe_for_production": true,
+      "reason": "Alternative fix only adds ngrok domains in development mode",
+      "recommendation": "Use alternative_fix for production safety"
+    },
+    "related_files": [
+      {
+        "file": "/Users/shreeramads/artisan-economy-mvp/frontend/lib/api.ts",
+        "status": "no_changes_needed",
+        "reason": "Axios configuration is correct"
+      },
+      {
+        "file": "/Users/shreeramads/artisan-economy-mvp/frontend/middleware.ts",
+        "status": "no_changes_needed",
+        "reason": "Middleware doesn't interfere with API requests"
+      },
+      {
+        "file": "/Users/shreeramads/artisan-economy-mvp/backend/src/main.ts",
+        "status": "no_changes_needed",
+        "reason": "Backend CORS is correctly configured"
+      }
+    ],
+    "expected_outcome": {
+      "before_fix": "Browser shows CORS errors, cart requests fail",
+      "after_fix": "Cart requests succeed, authentication works, no CORS errors",
+      "success_indicators": [
+        "No CORS errors in browser console",
+        "Successful API requests in Network tab",
+        "Cookies transmitted correctly",
+        "Login and dashboard loading works"
+      ]
+    }
+  }
+}

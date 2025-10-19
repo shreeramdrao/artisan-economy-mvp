@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Performance Optimizations */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Import Google Fonts properly */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* Critical CSS for above-the-fold content */
+.critical-content {
+  contain: layout style paint;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -24,6 +37,31 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 222.2 84% 4.9%;
     --radius: 0.5rem;
+  }
+
+  /* High Contrast Mode */
+  @media (prefers-contrast: more) {
+    :root {
+      --background: 0 0% 100%;
+      --foreground: 0 0% 0%;
+      --card: 0 0% 100%;
+      --card-foreground: 0 0% 0%;
+      --popover: 0 0% 100%;
+      --popover-foreground: 0 0% 0%;
+      --primary: 0 0% 0%;
+      --primary-foreground: 0 0% 100%;
+      --secondary: 0 0% 95%;
+      --secondary-foreground: 0 0% 0%;
+      --muted: 0 0% 95%;
+      --muted-foreground: 0 0% 0%;
+      --accent: 0 0% 0%;
+      --accent-foreground: 0 0% 100%;
+      --destructive: 0 100% 50%;
+      --destructive-foreground: 0 0% 100%;
+      --border: 0 0% 0%;
+      --input: 0 0% 0%;
+      --ring: 0 0% 0%;
+    }
   }
 
   .dark {
@@ -94,5 +132,74 @@
 
   .product-card-bottom {
     @apply flex items-center justify-between min-h-[2rem];
+  }
+}
+
+/* Accessibility Preferences */
+@layer utilities {
+  /* Reduced Motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+    
+    /* Disable specific animations */
+    .animate-spin,
+    .animate-bounce,
+    .animate-pulse,
+    .animate-ping {
+      animation: none !important;
+    }
+    
+    /* Disable transforms and transitions */
+    .hover\\:scale-110:hover,
+    .hover\\:scale-105:hover,
+    .hover\\:-translate-y-1:hover,
+    .hover\\:-translate-y-2:hover,
+    .hover\\:translate-y-0:hover {
+      transform: none !important;
+    }
+  }
+
+  /* High Contrast Mode Utilities */
+  @media (prefers-contrast: more) {
+    .text-gray-600,
+    .text-gray-500,
+    .text-gray-400 {
+      color: black !important;
+    }
+    
+    .bg-gray-100,
+    .bg-gray-50 {
+      background-color: white !important;
+    }
+    
+    .border-gray-200,
+    .border-gray-300 {
+      border-color: black !important;
+    }
+  }
+
+  /* Focus Management */
+  .focus-visible {
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+  }
+
+  /* Screen Reader Only */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 }

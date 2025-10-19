@@ -50,7 +50,7 @@ export default function SellerDashboard() {
         <h1 className="text-3xl font-bold mb-2">
           Welcome back, {stats.sellerInfo?.name || user?.name || 'Master Artisan'}!
         </h1>
-        <p className="text-gray-600">Here's an overview of your business</p>
+        <p className="text-gray-600">Here&apos;s an overview of your business</p>
       </div>
 
       {/* Stats Grid */}

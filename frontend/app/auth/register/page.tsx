@@ -2,9 +2,10 @@
 
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import type { Route } from 'next' // ✅ Import Route for typed router
 
-// Force dynamic rendering for client-dependent functionality
 export const dynamic = 'force-dynamic'
+
 import { authApi } from '@/lib/api'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,12 +13,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { useAuth } from '@/context/auth-context'
-
-// ✅ Helper to set cookies manually (client-side)
-const setCookie = (name: string, value: string, days = 7) => {
-  const expires = new Date(Date.now() + days * 864e5).toUTCString()
-  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=None; Secure`
-}
 
 function RegisterForm() {
   const [name, setName] = useState('')
@@ -46,14 +41,10 @@ function RegisterForm() {
         role,
       })
 
-      const { token, user } = res
-      if (!token || !user) throw new Error('Invalid response from server')
+      const { user } = res
+      if (!user) throw new Error('Invalid response from server')
 
-      // ✅ Store JWT + user cookies
-      setCookie('token', token, 7)
-      setCookie('authUser', JSON.stringify(user), 7)
-
-      // ✅ Update Auth Context
+      // ✅ Backend handles cookie setting - just update auth context
       login({
         userId: user.userId,
         name: user.name,
@@ -66,17 +57,21 @@ function RegisterForm() {
         description: `Welcome, ${user.name}!`,
       })
 
-      // ✅ Redirect
-      if (redirectParam) {
-        router.replace(redirectParam)
+      // ✅ Safe redirect handling
+      if (redirectParam && redirectParam.startsWith('/')) {
+        router.replace(redirectParam as Route)
       } else {
-        router.replace(user.role === 'seller' ? '/seller' : '/buyer')
+        const destination: Route =
+          user.role === 'seller' ? '/seller' : '/buyer'
+        router.replace(destination)
       }
     } catch (err: any) {
       console.error('❌ Registration failed:', err)
       toast({
         title: 'Registration Failed',
-        description: err.response?.data?.message || 'Something went wrong. Please try again.',
+        description:
+          err.response?.data?.message ||
+          'Something went wrong. Please try again.',
         variant: 'destructive',
       })
     } finally {
@@ -149,7 +144,9 @@ function RegisterForm() {
             <select
               id="role"
               value={role}
-              onChange={(e) => setRole(e.target.value as 'seller' | 'buyer')}
+              onChange={(e) =>
+                setRole(e.target.value as 'seller' | 'buyer')
+              }
               className="w-full mt-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               <option value="buyer">Buyer</option>
@@ -170,7 +167,9 @@ function RegisterForm() {
         <p className="text-sm text-center text-gray-600 mt-6">
           Already have an account?{' '}
           <a
-            href={`/auth/login${redirectParam ? `?redirect=${redirectParam}` : ''}`}
+            href={`/auth/login${
+              redirectParam ? `?redirect=${redirectParam}` : ''
+            }`}
             className="text-orange-600 font-medium hover:underline"
           >
             Login

@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import FormData from 'form-data';
+import { fileTypeFromBuffer } from 'file-type';
 
 @Injectable()
 export class RemoveBgService {
@@ -34,8 +35,49 @@ export class RemoveBgService {
     return true;
   }
 
+  /**
+   * Validates image file buffer for security and size constraints
+   */
+  private async validateImageFile(buffer: Buffer): Promise<void> {
+    // Check file size (5MB limit)
+    if (buffer.length > 5 * 1024 * 1024) {
+      throw new BadRequestException('Image file too large. Maximum size is 5MB.');
+    }
+
+    // Check minimum size (1KB)
+    if (buffer.length < 1024) {
+      throw new BadRequestException('Image file too small. Minimum size is 1KB.');
+    }
+
+    // Validate file type using file-type library
+    try {
+      const fileType = await fileTypeFromBuffer(buffer);
+      if (!fileType) {
+        throw new BadRequestException('Unable to determine file type.');
+      }
+
+      const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+      if (!allowedMimeTypes.includes(fileType.mime)) {
+        throw new BadRequestException(
+          `Invalid file type: ${fileType.mime}. Allowed types: ${allowedMimeTypes.join(', ')}`
+        );
+      }
+
+      this.logger.log(`File validation passed: ${fileType.mime}, ${buffer.length} bytes`);
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      this.logger.error('File type validation failed:', error);
+      throw new BadRequestException('Invalid image file format.');
+    }
+  }
+
   async removeBackground(imageBuffer: Buffer): Promise<Buffer> {
     try {
+      // Validate file before processing
+      await this.validateImageFile(imageBuffer);
+      
       if (!this.checkInitialized()) {
         return imageBuffer; // Return original buffer if service not available
       }
@@ -95,6 +137,9 @@ export class RemoveBgService {
         return imageBuffer;
       }
     } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error; // Re-throw validation errors
+      }
       this.logger.warn(`[Remove.bg Warning] ${error.message}`);
       return imageBuffer;
     }

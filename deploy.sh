@@ -133,3 +133,30 @@ echo -e "  ./deploy.sh  # Run this script again"
 echo -e "${YELLOW}Delete services:${NC}"
 echo -e "  gcloud run services delete ${BACKEND_SERVICE} --region=${REGION}"
 echo -e "  gcloud run services delete ${FRONTEND_SERVICE} --region=${REGION}"
+
+# Rollback function
+rollback_service() {
+  local service_name=$1
+  local region=$2
+  echo -e "${YELLOW}Rolling back ${service_name}...${NC}"
+  
+  # Get the previous revision
+  local previous_revision=$(gcloud run revisions list --service=${service_name} --region=${region} --limit=2 --format="value(metadata.name)" | tail -n 1)
+  
+  if [ -n "$previous_revision" ]; then
+    # Update service to use previous revision
+    gcloud run services update ${service_name} \
+      --region=${region} \
+      --revision-suffix=rollback-$(date +%s) \
+      --image=$(gcloud run revisions describe ${previous_revision} --region=${region} --format="value(spec.template.spec.containers[0].image)")
+    
+    echo -e "${GREEN}✅ ${service_name} rolled back to previous revision${NC}"
+  else
+    echo -e "${RED}❌ No previous revision found for ${service_name}${NC}"
+  fi
+}
+
+# Rollback commands
+echo -e "${YELLOW}Rollback services:${NC}"
+echo -e "  rollback_service ${BACKEND_SERVICE} ${REGION}"
+echo -e "  rollback_service ${FRONTEND_SERVICE} ${REGION}"

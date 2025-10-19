@@ -9,6 +9,7 @@ import {
   ProductDetailResponse,
   CheckoutResponse,
 } from './dto/buyer-response.dto';
+import { PaginationDto, PaginatedResponseDto } from '../common/dto/pagination.dto';
 import Stripe from 'stripe';
 import Razorpay from 'razorpay';
 import * as crypto from 'crypto';
@@ -31,7 +32,7 @@ export class BuyerService {
   }
 
   // ----------------- PRODUCTS -----------------
-  async getProducts(query: ProductQueryDto): Promise<ProductListResponse[]> {
+  async getProducts(query: ProductQueryDto & PaginationDto): Promise<PaginatedResponseDto<ProductListResponse>> {
     let products = await this.firestoreService.queryDocuments('products', {
       field: 'status',
       operator: '==',
@@ -50,7 +51,16 @@ export class BuyerService {
       products.sort((a, b) => (b.views || 0) - (a.views || 0));
     }
 
-    return products.map((product) => ({
+    // Apply pagination
+    const page = query.page || 1;
+    const limit = query.limit || 12;
+    const skip = (page - 1) * limit;
+    const total = products.length;
+    
+    const paginatedProducts = products.slice(skip, skip + limit);
+
+    // Transform to response format
+    const transformedProducts = paginatedProducts.map((product) => ({
       productId: product.id,
       title: product.title,
       price: product.price.amount,
@@ -62,6 +72,8 @@ export class BuyerService {
       rating: 4.5,
       location: 'India',
     }));
+
+    return new PaginatedResponseDto(transformedProducts, total, page, limit);
   }
 
   async getProductDetails(productId: string): Promise<ProductDetailResponse> {
@@ -415,7 +427,7 @@ export class BuyerService {
   }
 
   // ----------------- ORDERS -----------------
-  async getOrders(buyerId: string) {
+  async getOrders(buyerId: string, pagination: PaginationDto = {}) {
     if (!buyerId) throw new BadRequestException('buyerId is required');
 
     let orders = await this.firestoreService.queryDocuments('orders', {
@@ -434,7 +446,15 @@ export class BuyerService {
 
     orders.sort((a, b) => normalizeTime(b.createdAt) - normalizeTime(a.createdAt));
 
-    return orders.map((o) => ({
+    // Apply pagination
+    const page = pagination.page || 1;
+    const limit = pagination.limit || 10;
+    const skip = (page - 1) * limit;
+    const total = orders.length;
+    
+    const paginatedOrders = orders.slice(skip, skip + limit);
+
+    const transformedOrders = paginatedOrders.map((o) => ({
       orderId: o.id,
       products: o.products || [],
       totalAmount: o.totalAmount,
@@ -444,6 +464,8 @@ export class BuyerService {
       createdAt: o.createdAt,
       shippingAddress: o.shippingAddress,
     }));
+
+    return new PaginatedResponseDto(transformedOrders, total, page, limit);
   }
 
   // ----------------- EXTRA -----------------
@@ -501,31 +523,74 @@ export class BuyerService {
     }));
   }
 
+  /**
+   * Batch enrich cart items with product details for better performance
+   */
+  async enrichCartItems(cartItems: any[]): Promise<any[]> {
+    if (!cartItems || cartItems.length === 0) {
+      return [];
+    }
+
+    try {
+      // Get all product IDs from cart items
+      const productIds = cartItems.map(item => item.productId);
+      
+      // Batch fetch all products at once
+      const products = await Promise.all(
+        productIds.map(async (productId) => {
+          try {
+            return await this.firestoreService.getDocument('products', productId);
+          } catch (error) {
+            this.logger.warn(`Failed to fetch product ${productId}:`, error);
+            return null;
+          }
+        })
+      );
+
+      // Enrich cart items with product details
+      return cartItems.map((item, index) => {
+        const product = products[index];
+        if (!product) {
+          return {
+            productId: item.productId,
+            quantity: item.quantity,
+            title: 'Unknown Product',
+            price: 0,
+            imageUrl: '/images/fallback.svg',
+          };
+        }
+
+        return {
+          productId: item.productId,
+          quantity: item.quantity,
+          title: product.title || 'Untitled',
+          price: product.price?.amount || 0,
+          imageUrl: product.images?.polished || 
+                   product.images?.enhanced || 
+                   product.images?.original || 
+                   '/images/fallback.svg',
+        };
+      });
+    } catch (error) {
+      this.logger.error('Failed to enrich cart items:', error);
+      // Return fallback data
+      return cartItems.map(item => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        title: 'Unknown Product',
+        price: 0,
+        imageUrl: '/images/fallback.svg',
+      }));
+    }
+  }
+
   // ----------------- CART -----------------
   async getCart(buyerId: string) {
     const cart = await this.firestoreService.getDocument('carts', buyerId);
     const items = cart?.items || [];
 
-    const enriched = await Promise.all(
-      items.map(async (i: any) => {
-        const product = await this.firestoreService.getDocument('products', i.productId);
-        if (!product) {
-          return { ...i, title: 'Unknown Product', price: 0 };
-        }
-        return {
-          ...i,
-          title: product.title,
-          price: product.price.amount,
-          imageUrl:
-            product.images?.polished ||
-            product.images?.enhanced ||
-            product.images?.original ||
-            null,
-        };
-      }),
-    );
-
-    return enriched;
+    // Use batch enrichment for better performance
+    return await this.enrichCartItems(items);
   }
 
   async addToCart(buyerId: string, productId: string, quantity: number) {
@@ -554,5 +619,86 @@ export class BuyerService {
   async clearCart(buyerId: string) {
     await this.firestoreService.setDocument('carts', buyerId, { items: [] });
     return [];
+  }
+
+  // ----------------- GUEST CART -----------------
+  private guestCartStore = new Map<string, any[]>();
+
+  private getSessionId(req: any): string {
+    // Use session ID from cookie or generate one
+    return req.sessionID || req.headers['x-session-id'] || 'default-guest-session';
+  }
+
+  async getGuestCart(sessionId: string) {
+    const items = this.guestCartStore.get(sessionId) || [];
+    return await this.enrichCartItems(items);
+  }
+
+  async addGuestCartItem(sessionId: string, productId: string, quantity: number) {
+    const items = this.guestCartStore.get(sessionId) || [];
+    
+    const existing = items.find((i: any) => i.productId === productId);
+    if (existing) {
+      existing.quantity += quantity;
+    } else {
+      items.push({ productId, quantity });
+    }
+    
+    this.guestCartStore.set(sessionId, items);
+    return await this.enrichCartItems(items);
+  }
+
+  async updateGuestCartItem(sessionId: string, itemId: string, quantity: number) {
+    const items = this.guestCartStore.get(sessionId) || [];
+    const item = items.find((i: any) => i.productId === itemId);
+    
+    if (!item) {
+      throw new NotFoundException('Cart item not found');
+    }
+    
+    item.quantity = quantity;
+    this.guestCartStore.set(sessionId, items);
+    return await this.enrichCartItems(items);
+  }
+
+  async removeGuestCartItem(sessionId: string, itemId: string) {
+    const items = this.guestCartStore.get(sessionId) || [];
+    const filteredItems = items.filter((i: any) => i.productId !== itemId);
+    
+    this.guestCartStore.set(sessionId, filteredItems);
+    return await this.enrichCartItems(filteredItems);
+  }
+
+  async migrateGuestCart(sessionId: string, userId: string) {
+    const guestItems = this.guestCartStore.get(sessionId) || [];
+    
+    if (guestItems.length === 0) {
+      this.logger.log(`No guest cart items to migrate for user: ${userId}`);
+      return await this.getCart(userId);
+    }
+
+    // Get existing authenticated cart
+    const existingCart = (await this.firestoreService.getDocument('carts', userId)) || {
+      items: [],
+    };
+
+    // Merge guest items with existing cart
+    for (const guestItem of guestItems) {
+      const existing = existingCart.items.find((i: any) => i.productId === guestItem.productId);
+      if (existing) {
+        existing.quantity += guestItem.quantity;
+      } else {
+        existingCart.items.push(guestItem);
+      }
+    }
+
+    // Save merged cart
+    await this.firestoreService.setDocument('carts', userId, existingCart);
+    
+    // Clear guest cart
+    this.guestCartStore.delete(sessionId);
+    
+    this.logger.log(`Migrated ${guestItems.length} guest cart items for user: ${userId}`);
+    return await this.getCart(userId);
   }
 }

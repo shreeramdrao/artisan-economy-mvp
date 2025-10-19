@@ -6,7 +6,7 @@ import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import * as bodyParser from 'body-parser';
-import cookieParser from 'cookie-parser';
+import cookieParser = require('cookie-parser');
 import helmet from 'helmet';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -15,46 +15,92 @@ import { Request, Response } from 'express';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
-  const logger = new Logger('Bootstrap'); // ✅ Use static logger
+  const logger = new Logger('Bootstrap');
 
-  // ✅ Secure headers
-  app.use(helmet());
+  // ✅ Helmet for secure headers (only in production)
+  const isDev = process.env.NODE_ENV === 'development';
+  if (!isDev) {
+    app.use(
+      helmet({
+        crossOriginResourcePolicy: false,
+        crossOriginOpenerPolicy: false,
+        crossOriginEmbedderPolicy: false,
+      }),
+    );
+  }
 
-  // ✅ Serve static assets (favicon, apple-touch-icon, etc.)
-  app.useStaticAssets(join(__dirname, '..', 'public'), {
-    prefix: '/',
-  });
+  // ✅ Serve static assets
+  app.useStaticAssets(join(__dirname, '..', 'public'), { prefix: '/' });
 
-  // ✅ Stripe webhook raw body parser (MUST come before JSON parser)
+  // ✅ Stripe webhook (must come before JSON parser)
   app.use(
     '/api/buyer/stripe-webhook',
     bodyParser.raw({ type: 'application/json' }),
   );
 
-  // ✅ Cookie parser (JWT + user info)
+  // ✅ Cookie parser
   app.use(cookieParser());
 
-  // ✅ JSON & URL-encoded parsers
-  app.use(bodyParser.json({ limit: '10mb' }));
-  app.use(bodyParser.urlencoded({ extended: true }));
+
+  // ✅ Development vs Production configuration
+  if (isDev) {
+    logger.warn('⚠️ Running in DEV mode: CORS & Helmet DISABLED');
+    
+    // ✅ Disable Helmet entirely in development
+    // (Helmet is already configured above, but we'll skip it in dev)
+    
+    // ✅ Completely open CORS for development
+    app.enableCors({
+      origin: true,
+      credentials: true,
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+      exposedHeaders: ['Set-Cookie', 'Authorization'],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    });
+  } else {
+    logger.log('🔒 Running in PRODUCTION mode: CORS & Helmet ENABLED');
+    
+    // ✅ Dynamic CORS setup for production
+    app.enableCors({
+      origin: (origin, callback) => {
+        // 👇 Strict whitelist for production
+        const allowedOrigins = [
+          'https://buyer.artisaneconomy.in',
+          'https://seller.artisaneconomy.in',
+          'https://artisan-frontend-188692597311.asia-south1.run.app',
+          process.env.FRONTEND_URL,
+        ].filter(Boolean);
+
+        if (allowedOrigins.includes(origin)) {
+          callback(null, origin);
+        } else {
+          logger.warn(`❌ Blocked by CORS: ${origin}`);
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
+      credentials: true,
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+      exposedHeaders: ['Set-Cookie', 'Authorization'],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    });
+  }
+
+  // ✅ Body parsers
+  app.use(
+    bodyParser.json({
+      limit: '2mb',
+      verify: (req, res, buf) => {
+        if (buf.length > 2 * 1024 * 1024)
+          throw new Error('Request payload too large');
+      },
+    }),
+  );
+  app.use(bodyParser.urlencoded({ extended: true, limit: '2mb' }));
 
   // ✅ Global prefix
   app.setGlobalPrefix('api');
 
-  // ✅ CORS configuration (Production-ready)
-  app.enableCors({
-    origin: [
-      'https://artisan-frontend-188692597311.asia-south1.run.app',
-      'https://buyerartisaneconomy.in',
-      'https://sellerartisaneconomy.in',
-      'http://localhost:3000',
-    ],
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
-  });
-
-  // ✅ Global validation pipe
+  // ✅ Global validation, filters, interceptors
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -62,8 +108,6 @@ async function bootstrap() {
       transformOptions: { enableImplicitConversion: true },
     }),
   );
-
-  // ✅ Global filters & interceptors
   app.useGlobalFilters(new GlobalExceptionFilter(configService));
   app.useGlobalInterceptors(new LoggingInterceptor());
 
@@ -87,7 +131,7 @@ async function bootstrap() {
     swaggerOptions: { persistAuthorization: true },
   });
 
-  // ✅ Health endpoints for Cloud Run
+  // ✅ Health endpoints
   app.getHttpAdapter().get('/api/health', (req: Request, res: Response) => {
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
   });
@@ -108,14 +152,28 @@ async function bootstrap() {
     });
   });
 
+  // ✅ Debug CORS endpoint
+  app.getHttpAdapter().get('/api/debug-cors', (req: Request, res: Response) => {
+    res
+      .setHeader('Access-Control-Allow-Origin', req.headers.origin || '*')
+      .setHeader('Access-Control-Allow-Credentials', 'true')
+      .json({
+        originReceived: req.headers.origin,
+        nodeEnv: process.env.NODE_ENV,
+        message: 'CORS debug endpoint active',
+      });
+  });
+
   // ✅ Start server
   const port = process.env.PORT || 4000;
   await app.listen(port);
-  logger.log(`🚀 Artisan Economy backend running at: http://localhost:${port}/api/docs`);
+  logger.log(
+    `🚀 Backend running at http://localhost:${port}/api/docs (CORS + Cookies enabled)`
+  );
 
-  // ✅ Graceful shutdown for Cloud Run
+  // ✅ Graceful shutdown
   const gracefulShutdown = async (signal: string) => {
-    logger.warn(`🛑 Received ${signal}. Starting graceful shutdown...`);
+    logger.warn(`🛑 Received ${signal}. Shutting down gracefully...`);
     try {
       await app.close();
       logger.log('✅ Server closed successfully');
@@ -128,12 +186,10 @@ async function bootstrap() {
 
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
   process.on('uncaughtException', (error) => {
     logger.error('❌ Uncaught Exception:', error);
     gracefulShutdown('uncaughtException');
   });
-
   process.on('unhandledRejection', (reason, promise) => {
     logger.error('❌ Unhandled Rejection:', { reason, promise });
     gracefulShutdown('unhandledRejection');

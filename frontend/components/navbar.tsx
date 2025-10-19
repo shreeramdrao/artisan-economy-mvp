@@ -9,13 +9,17 @@ import { useState, useEffect } from 'react'
 export default function Navbar() {
   const router = useRouter()
   const pathname = usePathname()
-  const { user, logout } = useAuth()
+  const { user, logout, loading } = useAuth()
   const { cart } = useCart()
 
   const [likedCount, setLikedCount] = useState(0)
+  const [isRouterReady, setIsRouterReady] = useState(false)
 
-  // ✅ Sync liked count from localStorage
+  // ✅ Ensure router is ready and sync liked count from localStorage
   useEffect(() => {
+    // Mark router as ready after component mounts
+    setIsRouterReady(true)
+    
     const updateLikedCount = () => {
       try {
         const likedIds: string[] = JSON.parse(
@@ -34,6 +38,20 @@ export default function Navbar() {
     }
   }, [])
 
+
+  // ✅ Safe navigation helper
+  const safeNavigate = (path: string) => {
+    if (isRouterReady && router) {
+      try {
+        router.push(path as any)
+      } catch (error) {
+        console.error('Navigation error:', error)
+        // Fallback to window.location if router fails
+        window.location.href = path
+      }
+    }
+  }
+
   // ✅ Decide portal label
   let portalLabel = 'Marketplace'
   if (pathname.startsWith('/buyer')) {
@@ -48,7 +66,7 @@ export default function Navbar() {
         {/* Logo + Dynamic Portal Label */}
         <div
           className="flex items-center space-x-3 cursor-pointer"
-          onClick={() => router.push('/')}
+          onClick={() => safeNavigate('/')}
         >
           <span className="text-2xl">🪔</span>
           <span className="text-xl font-bold text-orange-600">
@@ -78,27 +96,27 @@ export default function Navbar() {
             <>
               <Button
                 variant="ghost"
-                onClick={() => router.push('/buyer/artisans')}
+                onClick={() => safeNavigate('/buyer/artisans')}
               >
                 Artisans
               </Button>
 
               <Button
                 variant="ghost"
-                onClick={() => router.push('/buyer/orders')}
+                onClick={() => safeNavigate('/buyer/orders')}
               >
                 My Orders
               </Button>
 
               <Button
                 variant="ghost"
-                onClick={() => router.push('/buyer/liked')}
+                onClick={() => safeNavigate('/buyer/liked')}
               >
                 ❤️ Liked ({likedCount})
               </Button>
               <Button
                 variant="outline"
-                onClick={() => router.push('/buyer/cart')}
+                onClick={() => safeNavigate('/buyer/cart')}
               >
                 🛒 Cart ({cart?.length || 0})
               </Button>
@@ -110,19 +128,19 @@ export default function Navbar() {
             <>
               <Button
                 variant="ghost"
-                onClick={() => router.push('/seller')}
+                onClick={() => safeNavigate('/seller')}
               >
                 Dashboard
               </Button>
               <Button
                 variant="ghost"
-                onClick={() => router.push('/seller/upload')}
+                onClick={() => safeNavigate('/seller/upload')}
               >
                 Upload Product
               </Button>
               <Button
                 variant="ghost"
-                onClick={() => router.push('/seller/products')}
+                onClick={() => safeNavigate('/seller/products')}
               >
                 My Products
               </Button>
@@ -130,14 +148,14 @@ export default function Navbar() {
               {/* Quick access for seller payments */}
               <Button
                 variant="ghost"
-                onClick={() => router.push('/seller/payments')}
+                onClick={() => safeNavigate('/seller/payments')}
               >
                 💰 Payments
               </Button>
 
               <Button
                 variant="outline"
-                onClick={() => router.push('/seller/profile')}
+                onClick={() => safeNavigate('/seller/profile')}
               >
                 👤 Profile
               </Button>
@@ -145,12 +163,20 @@ export default function Navbar() {
           )}
 
           {/* Auth actions */}
-          {!user ? (
+          {loading && !isRouterReady ? (
+            <div className="text-sm text-gray-500">Loading...</div>
+          ) : !user ? (
             <>
-              <Button onClick={() => router.push('/auth/login')}>Login</Button>
+              <Button 
+                onClick={() => safeNavigate('/auth/login')}
+                disabled={!isRouterReady}
+              >
+                Login
+              </Button>
               <Button
                 variant="outline"
-                onClick={() => router.push('/auth/register')}
+                onClick={() => safeNavigate('/auth/register')}
+                disabled={!isRouterReady}
               >
                 Register
               </Button>

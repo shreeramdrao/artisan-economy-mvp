@@ -8,6 +8,7 @@ import { BuyerModule } from './buyer/buyer.module';
 import { AiModule } from './ai/ai.module';
 import { CommonModule } from './common/common.module';
 import { AuthModule } from './auth/auth.module'; // ✅ Auth module
+import { GatewayModule } from './gateway/gateway.module'; // ✅ WebSocket Gateway
 import configuration from './config/configuration';
 import { validationSchema } from './config/validation';
 
@@ -26,8 +27,13 @@ import { validationSchema } from './config/validation';
     ThrottlerModule.forRoot([
       {
         ttl: 60_000, // 60 seconds in milliseconds
-        limit: 30,   // Max 30 requests per IP per minute
+        limit: 20,   // Reduced from 30 for better security
       },
+      {
+        name: 'strict',
+        ttl: 60_000, // 60 seconds in milliseconds
+        limit: 5,    // Stricter limit for sensitive endpoints
+      }
     ]),
 
     // ✅ Application modules
@@ -36,6 +42,7 @@ import { validationSchema } from './config/validation';
     BuyerModule,
     AiModule,
     AuthModule, // Ensures /auth/register & /auth/login are active
+    GatewayModule, // WebSocket Gateway for real-time updates
   ],
 
   controllers: [AppController],
