@@ -12,52 +12,28 @@
   "categories": ["shopping", "business", "lifestyle"],
   "icons": [
     {
-      "src": "/images/icon-72x72.png",
-      "sizes": "72x72",
+      "src": "/images/apple-touch-icon.png",
+      "sizes": "180x180",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/images/icon-96x96.png",
-      "sizes": "96x96",
+      "src": "/images/apple-touch-icon.png",
+      "sizes": "180x180",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable"
     },
     {
-      "src": "/images/icon-128x128.png",
-      "sizes": "128x128",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/images/icon-144x144.png",
-      "sizes": "144x144",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/images/icon-152x152.png",
-      "sizes": "152x152",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/images/icon-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/images/icon-384x384.png",
-      "sizes": "384x384",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/images/icon-512x512.png",
+      "src": "/images/fallback.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/images/fallback.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "screenshots": [
@@ -82,8 +58,8 @@
       "url": "/buyer",
       "icons": [
         {
-          "src": "/images/icon-96x96.png",
-          "sizes": "96x96"
+          "src": "/images/apple-touch-icon.png",
+          "sizes": "180x180"
         }
       ]
     },
@@ -94,8 +70,8 @@
       "url": "/buyer/cart",
       "icons": [
         {
-          "src": "/images/icon-96x96.png",
-          "sizes": "96x96"
+          "src": "/images/apple-touch-icon.png",
+          "sizes": "180x180"
         }
       ]
     },
@@ -106,8 +82,8 @@
       "url": "/buyer?chat=true",
       "icons": [
         {
-          "src": "/images/icon-96x96.png",
-          "sizes": "96x96"
+          "src": "/images/apple-touch-icon.png",
+          "sizes": "180x180"
         }
       ]
     }

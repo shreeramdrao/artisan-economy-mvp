@@ -128,13 +128,6 @@ export default function RootLayout({
           }}
         />
 
-        <link
-          rel="preload"
-          href="/fonts/inter.woff2"
-          as="font"
-          type="font/woff2"
-          crossOrigin="anonymous"
-        />
         <link rel="preconnect" href="https://storage.googleapis.com" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -169,6 +162,23 @@ export default function RootLayout({
                   navigator.serviceWorker.register('/service-worker.js')
                     .then(function(registration) {
                       console.log('SW registered: ', registration);
+                      
+                      // Send configuration to service worker
+                      const config = {
+                        apiBaseUrl: process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000',
+                        environment: process.env.NODE_ENV || 'development'
+                      };
+                      
+                      // Wait for service worker to be ready and send config
+                      navigator.serviceWorker.ready.then(function(registration) {
+                        if (registration.active) {
+                          registration.active.postMessage({
+                            type: 'CONFIG_UPDATE',
+                            config: config
+                          });
+                          console.log('Configuration sent to service worker:', config);
+                        }
+                      });
                     })
                     .catch(function(registrationError) {
                       console.log('SW registration failed: ', registrationError);

@@ -186,4 +186,38 @@ export class AiController {
       };
     }
   }
+
+  @Post('insights')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
+  @ApiOperation({ summary: 'Generate business insights from analytics data' })
+  @ApiResponse({
+    status: 200,
+    description: 'AI-generated business insights',
+  })
+  async generateInsights(@Body() body: { data: any }) {
+    try {
+      const insights = await this.aiService.generateInsights(body.data);
+      return { insights };
+    } catch (error) {
+      return { insights: [] };
+    }
+  }
+
+  @Post('forecast')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
+  @ApiOperation({ summary: 'Generate sales forecast from historical data' })
+  @ApiResponse({
+    status: 200,
+    description: 'AI-generated sales forecast',
+  })
+  async generateForecast(@Body() body: { historicalData: any[] }) {
+    try {
+      const forecast = await this.aiService.generateForecast(body.historicalData);
+      return { forecast };
+    } catch (error) {
+      return { forecast: [] };
+    }
+  }
 }

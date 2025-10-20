@@ -224,7 +224,8 @@ class BackgroundSyncManager {
   }
 
   private async processAction(action: QueuedCartAction): Promise<void> {
-    const url = `/api/buyer/cart${action.endpoint}`
+    const apiBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
+    const url = `${apiBaseUrl}/buyer/cart${action.endpoint}`
     
     const response = await fetch(url, {
       method: action.method,

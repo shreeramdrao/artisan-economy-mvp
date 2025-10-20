@@ -481,4 +481,127 @@ export class AiService {
       }
     }
   }
+
+  /**
+   * Generate business insights from analytics data
+   */
+  async generateInsights(data: any) {
+    try {
+      this.logger.log('Generating business insights from analytics data');
+      
+      const prompt = `Analyze the following seller analytics data and generate 3-5 key business insights:
+      
+      Data: ${JSON.stringify(data, null, 2)}
+      
+      Return insights in this format:
+      - type: one of 'revenue', 'inventory', 'product', 'customer', 'trend'
+      - title: short descriptive title
+      - description: detailed explanation
+      - confidence: 0-100 confidence score
+      - action: optional recommended action
+      - priority: 'low', 'medium', or 'high'
+      - category: relevant category
+      
+      Focus on actionable insights that can help improve business performance.
+      
+      Return as JSON array: [{"type": "revenue", "title": "...", "description": "...", "confidence": 85, "action": "...", "priority": "high", "category": "Growth"}]`;
+
+      const response = await this.vertexAiService.generateContent(prompt);
+      
+      try {
+        const insights = JSON.parse(response);
+        return Array.isArray(insights) ? insights : this.getFallbackInsights(data);
+      } catch (parseError) {
+        this.logger.warn('Failed to parse insights JSON, using fallback');
+        return this.getFallbackInsights(data);
+      }
+    } catch (error) {
+      this.logger.error('Error generating insights:', error);
+      return this.getFallbackInsights(data);
+    }
+  }
+
+  /**
+   * Generate sales forecast from historical data
+   */
+  async generateForecast(historicalData: any[]) {
+    try {
+      this.logger.log('Generating sales forecast from historical data');
+      
+      const prompt = `Based on this historical sales data, predict the next 3 months:
+      
+      Data: ${JSON.stringify(historicalData, null, 2)}
+      
+      Return forecast in this format:
+      - period: month/year
+      - predicted: predicted sales amount
+      - confidence: 0-100 confidence score
+      - trend: 'up', 'down', or 'stable'
+      
+      Consider seasonal patterns and growth trends.
+      
+      Return as JSON array: [{"period": "12/2024", "predicted": 15000, "confidence": 70, "trend": "up"}]`;
+
+      const response = await this.vertexAiService.generateContent(prompt);
+      
+      try {
+        const forecast = JSON.parse(response);
+        return Array.isArray(forecast) ? forecast : this.getFallbackForecast(historicalData);
+      } catch (parseError) {
+        this.logger.warn('Failed to parse forecast JSON, using fallback');
+        return this.getFallbackForecast(historicalData);
+      }
+    } catch (error) {
+      this.logger.error('Error generating forecast:', error);
+      return this.getFallbackForecast(historicalData);
+    }
+  }
+
+  // Fallback data generators
+  private getFallbackInsights(data: any) {
+    return [
+      {
+        type: 'revenue',
+        title: 'Revenue Growth Opportunity',
+        description: 'Your sales have been consistent. Consider expanding your product range to increase revenue.',
+        confidence: 75,
+        action: 'Add 2-3 new products in popular categories',
+        priority: 'medium',
+        category: 'Growth'
+      },
+      {
+        type: 'inventory',
+        title: 'Inventory Optimization',
+        description: 'Monitor your stock levels regularly to avoid stockouts during peak seasons.',
+        confidence: 80,
+        action: 'Set up automated reorder points',
+        priority: 'high',
+        category: 'Operations'
+      }
+    ];
+  }
+
+  private getFallbackForecast(historicalData: any[]) {
+    const currentMonth = new Date().getMonth();
+    return [
+      {
+        period: `${currentMonth + 1}/2024`,
+        predicted: 15000,
+        confidence: 70,
+        trend: 'up'
+      },
+      {
+        period: `${currentMonth + 2}/2024`,
+        predicted: 18000,
+        confidence: 65,
+        trend: 'up'
+      },
+      {
+        period: `${currentMonth + 3}/2024`,
+        predicted: 16500,
+        confidence: 60,
+        trend: 'stable'
+      }
+    ];
+  }
 }

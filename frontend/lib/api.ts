@@ -5,7 +5,7 @@ import type { SellerPaymentResponse } from '@/types/seller'
 if (!process.env.NEXT_PUBLIC_BACKEND_URL) {
   throw new Error('Missing NEXT_PUBLIC_BACKEND_URL environment variable');
 }
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
 
 /* ----------------- ✅ Axios Instance ----------------- */
 const api = axios.create({

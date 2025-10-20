@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/context/auth-context'
+import { SellerSidebar } from '@/components/seller/SellerSidebar'
+import { SellerHeader } from '@/components/seller/SellerHeader'
+import { SellerBreadcrumbs } from '@/components/seller/SellerBreadcrumbs'
 
 export default function SellerLayout({
   children,
@@ -12,6 +15,9 @@ export default function SellerLayout({
   const [mounted, setMounted] = useState(false)
   const [isRedirecting, setIsRedirecting] = useState(false)
   const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  
   const { user, loading } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
@@ -24,7 +30,7 @@ export default function SellerLayout({
     setLoadingStartTime(Date.now())
   }, [])
 
-  // ✅ Track loading time and provide timeout fallback
+  // Track loading time and provide timeout fallback
   useEffect(() => {
     if (loading && loadingStartTime) {
       const loadingTime = Date.now() - loadingStartTime
@@ -32,7 +38,7 @@ export default function SellerLayout({
     }
   }, [loading, loadingStartTime])
 
-  // ✅ Client-side authentication guard (prevents redirect loops)
+  // Client-side authentication guard (prevents redirect loops)
   useEffect(() => {
     if (mounted && !loading && !isRedirecting) {
       // Don't redirect if already on auth route or if already redirecting
@@ -51,7 +57,7 @@ export default function SellerLayout({
     }
   }, [mounted, loading, user, router, pathname, isRedirecting])
 
-  // ✅ Show loading state while checking authentication
+  // Show loading state while checking authentication
   if (!mounted || loading) {
     const loadingTime = loadingStartTime ? Date.now() - loadingStartTime : 0
     const isTimeout = loadingTime > 5000 // 5 second timeout
@@ -79,7 +85,7 @@ export default function SellerLayout({
     )
   }
 
-  // ✅ Show loading if user is not authenticated (while redirect is happening)
+  // Show loading if user is not authenticated (while redirect is happening)
   if (!user || user.role !== 'seller') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -93,8 +99,32 @@ export default function SellerLayout({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* ✅ Global Navbar already included from app/layout.tsx */}
-      <main>{children}</main>
+      {/* Sidebar */}
+      <SellerSidebar 
+        open={sidebarOpen}
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        onClose={() => setSidebarOpen(false)}
+      />
+      
+      {/* Main Content Area */}
+      <div className={`transition-all duration-300 ${
+        sidebarOpen ? (sidebarCollapsed ? 'ml-16' : 'ml-64') : 'ml-0'
+      }`}>
+        {/* Header */}
+        <SellerHeader 
+          onMenuClick={() => setSidebarOpen(!sidebarOpen)}
+          sidebarCollapsed={sidebarCollapsed}
+        />
+        
+        {/* Breadcrumbs */}
+        <SellerBreadcrumbs />
+        
+        {/* Page Content */}
+        <main className="p-6">
+          {children}
+        </main>
+      </div>
     </div>
   )
 }

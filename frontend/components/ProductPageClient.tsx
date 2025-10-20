@@ -161,7 +161,8 @@ export default function ProductPageClient({ productId }: Props) {
       }
       
       // Test TTS API availability
-      fetch('/api/tts', { method: 'GET' })
+      const apiBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
+      fetch(`${apiBaseUrl}/tts`, { method: 'GET' })
         .then(response => {
           if (response.ok) {
             console.log('✅ TTS API is available')

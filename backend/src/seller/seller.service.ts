@@ -388,6 +388,7 @@ export class SellerService {
 
   // ------------------ UPDATE PRODUCT ------------------
   async updateProduct(
+    sellerId: string,
     productId: string,
     dto: UpdateProductDto,
     image?: Express.Multer.File,
@@ -396,6 +397,11 @@ export class SellerService {
     try {
       const product = await this.firestoreService.getDocument('products', productId);
       if (!product) throw new NotFoundException(`Product ${productId} not found`);
+
+      // Verify the product belongs to the seller
+      if (product.sellerId !== sellerId) {
+        throw new BadRequestException('You can only update your own products');
+      }
 
       const updates: any = { updatedAt: new Date() };
 
@@ -478,7 +484,7 @@ export class SellerService {
       };
     } catch (error) {
       this.logger.error('Error updating product:', error);
-      throw error instanceof NotFoundException
+      throw error instanceof NotFoundException || error instanceof BadRequestException
         ? error
         : new InternalServerErrorException('Failed to update product');
     }
@@ -549,7 +555,13 @@ export class SellerService {
   }
 
   // ------------------ GET SELLER PRODUCTS ------------------
-  async getSellerProducts(sellerId: string): Promise<SellerProductsResponse[]> {
+  async getSellerProducts(sellerId: string, filters?: {
+    status?: string;
+    search?: string;
+    category?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<SellerProductsResponse[]> {
     if (!sellerId) throw new BadRequestException('sellerId is required');
 
     const products = await this.firestoreService.queryDocuments('products', {
@@ -558,7 +570,31 @@ export class SellerService {
       value: sellerId,
     });
 
-    return products.map((product) => ({
+    let filteredProducts = products;
+
+    // Apply filters
+    if (filters?.status) {
+      filteredProducts = filteredProducts.filter(p => p.status === filters.status);
+    }
+    if (filters?.category) {
+      filteredProducts = filteredProducts.filter(p => p.category === filters.category);
+    }
+    if (filters?.search) {
+      const searchLower = filters.search.toLowerCase();
+      filteredProducts = filteredProducts.filter(p => 
+        p.title?.toLowerCase().includes(searchLower) ||
+        p.description?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Apply pagination
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 50;
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
+
+    return paginatedProducts.map((product) => ({
       productId: product.id,
       title: product.title,
       price: product.price?.amount ?? 0,
@@ -572,7 +608,13 @@ export class SellerService {
   }
 
   // ------------------ GET SELLER ORDERS ------------------
-  async getSellerOrders(sellerId: string): Promise<SellerOrdersResponse[]> {
+  async getSellerOrders(sellerId: string, filters?: {
+    status?: string;
+    search?: string;
+    dateRange?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<SellerOrdersResponse[]> {
     if (!sellerId) throw new BadRequestException('sellerId is required');
     const allOrders: any[] = await this.firestoreService.queryDocuments('orders');
 
@@ -619,8 +661,38 @@ export class SellerService {
       }
     }
 
-    sellerOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    return sellerOrders;
+    let filteredOrders = sellerOrders;
+
+    // Apply filters
+    if (filters?.status) {
+      filteredOrders = filteredOrders.filter(o => o.status === filters.status);
+    }
+    if (filters?.search) {
+      const searchLower = filters.search.toLowerCase();
+      filteredOrders = filteredOrders.filter(o => 
+        o.buyerName?.toLowerCase().includes(searchLower) ||
+        o.products.some(p => p.productTitle?.toLowerCase().includes(searchLower))
+      );
+    }
+    if (filters?.dateRange) {
+      const now = new Date();
+      const days = parseInt(filters.dateRange);
+      if (!isNaN(days)) {
+        const cutoffDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+        filteredOrders = filteredOrders.filter(o => new Date(o.createdAt) >= cutoffDate);
+      }
+    }
+
+    // Sort by creation date (newest first)
+    filteredOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // Apply pagination
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 50;
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    
+    return filteredOrders.slice(startIndex, endIndex);
   }
 
   // ------------------ GET SELLER PAYMENTS ------------------
@@ -729,7 +801,251 @@ export class SellerService {
     }
   }
 
-  // ------------------ PROFILE MANAGEMENT ------------------
+  // ------------------ ANALYTICS ------------------
+  async getAnalytics(sellerId: string, range?: string, startDate?: string, endDate?: string) {
+    if (!sellerId) throw new BadRequestException('sellerId is required');
+
+    const [products, orders] = await Promise.all([
+      this.getSellerProducts(sellerId),
+      this.getSellerOrders(sellerId),
+    ]);
+
+    // Calculate date range
+    let start: Date, end: Date;
+    if (startDate && endDate) {
+      start = new Date(startDate);
+      end = new Date(endDate);
+    } else if (range) {
+      const now = new Date();
+      end = now;
+      switch (range) {
+        case '7d':
+          start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '30d':
+          start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        case '90d':
+          start = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      }
+    } else {
+      const now = new Date();
+      end = now;
+      start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
+
+    // Filter data by date range
+    const filteredOrders = orders.filter(order => {
+      const orderDate = new Date(order.createdAt);
+      return orderDate >= start && orderDate <= end;
+    });
+
+    const filteredProducts = products.filter(product => {
+      const productDate = new Date(product.createdAt);
+      return productDate >= start && productDate <= end;
+    });
+
+    // Calculate metrics
+    const totalRevenue = filteredOrders.reduce((sum, order) => {
+      if (order.paymentStatus === 'completed' || order.status === 'confirmed' || order.status === 'shipped') {
+        return sum + (order.amount || 0);
+      }
+      return sum;
+    }, 0);
+
+    const totalOrders = filteredOrders.length;
+    const totalProducts = filteredProducts.length;
+    const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+    // Calculate daily metrics
+    const dailyMetrics = [];
+    const currentDate = new Date(start);
+    while (currentDate <= end) {
+      const dayStart = new Date(currentDate);
+      const dayEnd = new Date(currentDate);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      const dayOrders = filteredOrders.filter(order => {
+        const orderDate = new Date(order.createdAt);
+        return orderDate >= dayStart && orderDate <= dayEnd;
+      });
+
+      const dayRevenue = dayOrders.reduce((sum, order) => {
+        if (order.paymentStatus === 'completed' || order.status === 'confirmed' || order.status === 'shipped') {
+          return sum + (order.amount || 0);
+        }
+        return sum;
+      }, 0);
+
+      dailyMetrics.push({
+        date: currentDate.toISOString().split('T')[0],
+        orders: dayOrders.length,
+        revenue: dayRevenue,
+      });
+
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return {
+      period: { start: start.toISOString(), end: end.toISOString() },
+      summary: {
+        totalRevenue,
+        totalOrders,
+        totalProducts,
+        avgOrderValue: Number(avgOrderValue.toFixed(2)),
+      },
+      dailyMetrics,
+      topProducts: filteredProducts
+        .sort((a, b) => (b.views || 0) - (a.views || 0))
+        .slice(0, 5),
+    };
+  }
+
+  // ------------------ ORDER MANAGEMENT ------------------
+  async updateOrderStatus(sellerId: string, orderId: string, status: string) {
+    if (!sellerId) throw new BadRequestException('sellerId is required');
+    if (!orderId) throw new BadRequestException('orderId is required');
+    if (!status) throw new BadRequestException('status is required');
+
+    const order = await this.firestoreService.getDocument('orders', orderId);
+    if (!order) throw new NotFoundException(`Order ${orderId} not found`);
+
+    // Verify the order belongs to the seller
+    const sellerOrders = await this.getSellerOrders(sellerId);
+    const sellerOrder = sellerOrders.find(o => o.orderId === orderId);
+    if (!sellerOrder) {
+      throw new BadRequestException('You can only update orders for your products');
+    }
+
+    const validStatuses = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      throw new BadRequestException(`Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+    }
+
+    await this.firestoreService.updateDocument('orders', orderId, {
+      status,
+      updatedAt: new Date(),
+    });
+
+    this.logger.log(`Order ${orderId} status updated to ${status} by seller ${sellerId}`);
+    return {
+      orderId,
+      status,
+      message: 'Order status updated successfully',
+    };
+  }
+
+  // ------------------ INVENTORY MANAGEMENT ------------------
+  async getInventory(sellerId: string) {
+    if (!sellerId) throw new BadRequestException('sellerId is required');
+
+    const products = await this.getSellerProducts(sellerId);
+    
+    const inventory = products.map(product => ({
+      productId: product.productId,
+      title: product.title,
+      category: product.category,
+      price: product.price,
+      status: product.status,
+      imageUrl: product.imageUrl,
+      views: product.views,
+      rating: product.rating,
+      createdAt: product.createdAt,
+      // Add stock information if available in the product data
+      stock: 0, // This would need to be added to the product schema
+      lowStockThreshold: 5, // Default threshold
+    }));
+
+    const summary = {
+      totalProducts: inventory.length,
+      publishedProducts: inventory.filter(p => p.status === 'published').length,
+      draftProducts: inventory.filter(p => p.status === 'draft').length,
+      lowStockProducts: inventory.filter(p => p.stock <= p.lowStockThreshold).length,
+      totalValue: inventory.reduce((sum, p) => sum + (p.price * p.stock), 0),
+    };
+
+    return {
+      summary,
+      products: inventory,
+    };
+  }
+
+  async updateStock(sellerId: string, productId: string, stock: number) {
+    if (!sellerId) throw new BadRequestException('sellerId is required');
+    if (!productId) throw new BadRequestException('productId is required');
+    if (typeof stock !== 'number' || stock < 0) {
+      throw new BadRequestException('Stock must be a non-negative number');
+    }
+
+    const product = await this.firestoreService.getDocument('products', productId);
+    if (!product) throw new NotFoundException(`Product ${productId} not found`);
+
+    // Verify the product belongs to the seller
+    if (product.sellerId !== sellerId) {
+      throw new BadRequestException('You can only update stock for your own products');
+    }
+
+    await this.firestoreService.updateDocument('products', productId, {
+      stock,
+      updatedAt: new Date(),
+    });
+
+    this.logger.log(`Stock updated for product ${productId} to ${stock} by seller ${sellerId}`);
+    return {
+      productId,
+      stock,
+      message: 'Stock updated successfully',
+    };
+  }
+
+  // ------------------ PRODUCT DELETION ------------------
+  async deleteProduct(sellerId: string, productId: string) {
+    if (!sellerId) throw new BadRequestException('sellerId is required');
+    if (!productId) throw new BadRequestException('productId is required');
+
+    const product = await this.firestoreService.getDocument('products', productId);
+    if (!product) throw new NotFoundException(`Product ${productId} not found`);
+
+    // Verify the product belongs to the seller
+    if (product.sellerId !== sellerId) {
+      throw new BadRequestException('You can only delete your own products');
+    }
+
+    // Delete the product from Firestore
+    await this.firestoreService.deleteDocument('products', productId);
+
+    // Remove product from seller's product list
+    try {
+      const seller = await this.firestoreService.getDocument('sellers', sellerId);
+      if (seller && seller.products) {
+        seller.products = seller.products.filter((id: string) => id !== productId);
+        await this.firestoreService.updateDocument('sellers', sellerId, {
+          products: seller.products,
+          updatedAt: new Date(),
+        });
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to update seller product list for ${sellerId}:`, error);
+    }
+
+    // 🧠 Remove product embedding from AI memory system
+    try {
+      await this.aiMemoryService.deleteProductEmbedding(productId);
+      this.logger.log(`✅ Product embedding deleted for: ${product.title}`);
+    } catch (embeddingError) {
+      this.logger.warn(`⚠️ Failed to delete product embedding for ${productId}:`, embeddingError);
+      // Don't fail the deletion if embedding deletion fails
+    }
+
+    this.logger.log(`Product ${productId} deleted by seller ${sellerId}`);
+    return {
+      productId,
+      message: 'Product deleted successfully',
+    };
+  }
   async getSellerProfile(sellerId: string) {
     if (!sellerId) throw new BadRequestException('sellerId is required');
     const seller = await this.firestoreService.getDocument('sellers', sellerId);

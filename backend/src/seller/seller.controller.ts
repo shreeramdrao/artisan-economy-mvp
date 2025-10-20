@@ -3,8 +3,10 @@ import {
   Post,
   Get,
   Patch,
+  Delete,
   Param,
   Body,
+  Query,
   UseGuards,
   UseInterceptors,
   UploadedFiles,
@@ -153,6 +155,7 @@ export class SellerController {
     if (!user?.email) throw new BadRequestException('Not authenticated');
 
     return this.sellerService.updateProduct(
+      user.email,
       productId,
       { ...updateProductDto, sellerId: user.email },
       image,
@@ -178,29 +181,61 @@ export class SellerController {
 
   // ------------------ GET SELLER PRODUCTS ------------------
   @Get('products')
-  @ApiOperation({ summary: 'Get all products for logged-in seller' })
+  @ApiOperation({ summary: 'Get seller products with filters' })
   @ApiResponse({ status: 200, type: [SellerProductsResponse] })
-  async getSellerProducts(@Req() req: Request): Promise<SellerProductsResponse[]> {
+  async getSellerProducts(
+    @Req() req: Request,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('category') category?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ): Promise<SellerProductsResponse[]> {
     const user = req.user as any;
     if (!user?.email) throw new BadRequestException('Not authenticated');
-    return this.sellerService.getSellerProducts(user.email);
+    return this.sellerService.getSellerProducts(user.email, {
+      status,
+      search,
+      category,
+      page: page || 1,
+      limit: limit || 50,
+    });
   }
 
   // ------------------ GET SELLER ORDERS ------------------
   @Get('orders')
-  @ApiOperation({ summary: 'Get all orders for logged-in seller' })
+  @ApiOperation({ summary: 'Get seller orders with filters' })
   @ApiResponse({ status: 200, type: [SellerOrdersResponse] })
-  async getSellerOrders(@Req() req: Request): Promise<SellerOrdersResponse[]> {
+  async getSellerOrders(
+    @Req() req: Request,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('dateRange') dateRange?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ): Promise<SellerOrdersResponse[]> {
     const user = req.user as any;
     if (!user?.email) throw new BadRequestException('Not authenticated');
-    return this.sellerService.getSellerOrders(user.email);
+    return this.sellerService.getSellerOrders(user.email, {
+      status,
+      search,
+      dateRange,
+      page: page || 1,
+      limit: limit || 50,
+    });
   }
 
   // ------------------ GET SELLER PAYMENTS ------------------
   @Get('payments')
   @ApiOperation({ summary: 'Get all completed payments for logged-in seller' })
   @ApiResponse({ status: 200, type: [SellerPaymentResponse] })
-  async getSellerPayments(@Req() req: Request): Promise<SellerPaymentResponse[]> {
+  async getSellerPayments(
+    @Req() req: Request,
+    @Query('search') search?: string,
+    @Query('dateRange') dateRange?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ): Promise<SellerPaymentResponse[]> {
     const user = req.user as any;
     if (!user?.email) throw new BadRequestException('Not authenticated');
     return this.sellerService.getSellerPayments(user.email);
@@ -213,5 +248,70 @@ export class SellerController {
     const user = req.user as any;
     if (!user?.email) throw new BadRequestException('Not authenticated');
     return this.sellerService.getSellerDashboard(user.email);
+  }
+
+  // ------------------ ANALYTICS ------------------
+  @Get('analytics')
+  @ApiOperation({ summary: 'Get seller analytics data' })
+  @ApiResponse({ status: 200, description: 'Analytics data retrieved successfully' })
+  async getAnalytics(
+    @Req() req: Request,
+    @Query('range') range?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+    return this.sellerService.getAnalytics(user.email, range, startDate, endDate);
+  }
+
+  // ------------------ ORDER MANAGEMENT ------------------
+  @Patch('orders/:orderId/status')
+  @ApiOperation({ summary: 'Update order status' })
+  @ApiResponse({ status: 200, description: 'Order status updated successfully' })
+  async updateOrderStatus(
+    @Req() req: Request,
+    @Param('orderId') orderId: string,
+    @Body() body: { status: string },
+  ) {
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+    return this.sellerService.updateOrderStatus(user.email, orderId, body.status);
+  }
+
+  // ------------------ PRODUCT MANAGEMENT ------------------
+  @Delete('products/:productId')
+  @ApiOperation({ summary: 'Delete product' })
+  @ApiResponse({ status: 200, description: 'Product deleted successfully' })
+  async deleteProduct(
+    @Req() req: Request,
+    @Param('productId') productId: string,
+  ) {
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+    return this.sellerService.deleteProduct(user.email, productId);
+  }
+
+  // ------------------ INVENTORY MANAGEMENT ------------------
+  @Get('inventory')
+  @ApiOperation({ summary: 'Get inventory data' })
+  @ApiResponse({ status: 200, description: 'Inventory data retrieved successfully' })
+  async getInventory(@Req() req: Request) {
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+    return this.sellerService.getInventory(user.email);
+  }
+
+  @Patch('inventory/:productId/stock')
+  @ApiOperation({ summary: 'Update product stock' })
+  @ApiResponse({ status: 200, description: 'Stock updated successfully' })
+  async updateStock(
+    @Req() req: Request,
+    @Param('productId') productId: string,
+    @Body() body: { stock: number },
+  ) {
+    const user = req.user as any;
+    if (!user?.email) throw new BadRequestException('Not authenticated');
+    return this.sellerService.updateStock(user.email, productId, body.stock);
   }
 }

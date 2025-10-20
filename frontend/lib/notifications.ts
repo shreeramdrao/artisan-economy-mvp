@@ -37,9 +37,48 @@ class NotificationManager {
       try {
         this.serviceWorkerRegistration = await navigator.serviceWorker.register('/service-worker.js');
         console.log('Notifications: Service worker registered');
+        
+        // Send configuration to service worker
+        await this.sendConfigurationToServiceWorker();
       } catch (error) {
         console.error('Notifications: Service worker registration failed:', error);
       }
+    }
+  }
+
+  private async sendConfigurationToServiceWorker() {
+    if (!this.serviceWorkerRegistration) return;
+
+    const config = {
+      apiBaseUrl: process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000',
+      environment: process.env.NODE_ENV || 'development'
+    };
+
+    try {
+      // Wait for service worker to be ready
+      await navigator.serviceWorker.ready;
+      
+      // Send configuration via postMessage
+      if (this.serviceWorkerRegistration.active) {
+        this.serviceWorkerRegistration.active.postMessage({
+          type: 'CONFIG_UPDATE',
+          config: config
+        });
+        console.log('Notifications: Configuration sent to service worker', config);
+      } else {
+        // If service worker is not active yet, wait for it
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (this.serviceWorkerRegistration?.active) {
+            this.serviceWorkerRegistration.active.postMessage({
+              type: 'CONFIG_UPDATE',
+              config: config
+            });
+            console.log('Notifications: Configuration sent to service worker (delayed)', config);
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Notifications: Failed to send configuration to service worker:', error);
     }
   }
 
@@ -141,7 +180,8 @@ class NotificationManager {
   // Send subscription to server
   private async sendSubscriptionToServer(subscription: PushSubscription) {
     try {
-      const response = await fetch('/api/notifications/subscribe', {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
+      const response = await fetch(`${apiBaseUrl}/notifications/subscribe`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

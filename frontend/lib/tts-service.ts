@@ -92,7 +92,8 @@ class TTSService {
       console.log('🎤 Generating new TTS audio...')
       console.log('🎤 Language:', languageCode, 'Voice:', selectedVoice)
       
-      const response = await fetch('/api/tts', {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
+      const response = await fetch(`${apiBaseUrl}/tts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -3,219 +3,322 @@
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { useState, useEffect } from 'react'
 import { formatPrice } from '@/lib/utils'
-import { sellerApi } from '@/lib/api'
-import { useAuth } from '@/context/auth-context' // ✅ Import Auth context
-
-// Force dynamic rendering for client-dependent functionality
-export const dynamic = 'force-dynamic'
+import { useAuth } from '@/context/auth-context'
+import { useDashboardStats, useOrders, useProducts } from '@/lib/hooks/useSellerData'
+import { 
+  Package, 
+  ShoppingCart, 
+  CreditCard, 
+  TrendingUp, 
+  Users, 
+  Eye,
+  Plus,
+  BarChart3,
+  RefreshCw,
+  AlertCircle
+} from 'lucide-react'
+import { AIInsightsWidget } from '@/components/ai/AIInsightsPanel'
+import { NotificationWidget } from '@/components/ai/NotificationSystem'
+import { AIAssistant } from '@/components/ai/AIAssistant'
+import { useToast } from '@/components/ui/use-toast'
 
 export default function SellerDashboard() {
-  const [stats, setStats] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { user } = useAuth()
+  const { toast } = useToast()
+  
+  // Fetch dashboard data
+  const { stats, isLoading: statsLoading, error: statsError, mutate: refreshStats } = useDashboardStats()
+  const { orders: recentOrders, isLoading: ordersLoading } = useOrders({ 
+    dateRange: '7d',
+    // Limit to 5 most recent orders
+  })
+  const { products: topProducts, isLoading: productsLoading } = useProducts({
+    status: 'published'
+  })
 
-  const { user } = useAuth() // ✅ Get logged-in user
-
-  useEffect(() => {
-    async function fetchDashboard() {
-      if (!user) return // wait until user is loaded
-      try {
-        // ✅ no userId param anymore, backend uses cookie/auth
-        const data = await sellerApi.getDashboard()
-        setStats(data)
-      } catch (err) {
-        console.error('❌ Failed to load dashboard:', err)
-        setError('Failed to load dashboard data')
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchDashboard()
-  }, [user])
-
-  if (loading) {
-    return <p className="p-8 text-center">Loading dashboard...</p>
+  const handleRefresh = async () => {
+    await refreshStats()
+    toast({
+      title: "Dashboard refreshed",
+      description: "Latest data has been loaded",
+    })
   }
 
-  if (error || !stats) {
-    return <p className="p-8 text-center text-red-600">{error || 'No data available'}</p>
+  // Show loading state
+  if (statsLoading && !stats) {
+    return (
+      <div className="space-y-6">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/3 mb-2"></div>
+          <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-24 bg-gray-200 rounded animate-pulse"></div>
+          ))}
+        </div>
+      </div>
+    )
   }
+
+  // Show error state
+  if (statsError && !stats) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+            <p className="text-gray-600">Unable to load dashboard data</p>
+          </div>
+          <Button onClick={handleRefresh} variant="outline">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Retry
+          </Button>
+        </div>
+        <Card className="p-8 text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Failed to load dashboard</h2>
+          <p className="text-gray-600 mb-4">
+            There was an error loading your dashboard data. Please try again.
+          </p>
+          <Button onClick={handleRefresh}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Retry
+          </Button>
+        </Card>
+      </div>
+    )
+  }
+
+  // Use fallback data if API fails
+  const dashboardData = stats || {
+    totalProducts: 0,
+    totalOrders: 0,
+    totalRevenue: 0,
+    pendingOrders: 0,
+    avgRating: 0,
+    viewsThisMonth: 0,
+    sellerInfo: { name: user?.name || 'Seller', email: user?.email || '' }
+  }
+
+  // Get top 3 products by orders
+  const topProductsByOrders = topProducts
+    .sort((a, b) => (b.orders || 0) - (a.orders || 0))
+    .slice(0, 3)
+
+  // Get recent orders (last 5)
+  const recentOrdersList = recentOrders.slice(0, 5)
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="space-y-6">
       {/* Welcome Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">
-          Welcome back, {stats.sellerInfo?.name || user?.name || 'Master Artisan'}!
-        </h1>
-        <p className="text-gray-600">Here&apos;s an overview of your business</p>
+      <div className="flex items-center justify-between">
+        <div>
+                  <h1 className="text-3xl font-bold text-gray-900">
+                    Welcome back, {dashboardData.sellerInfo?.name || user?.name || 'Master Artisan'}! 👋
+                  </h1>
+                  <p className="text-gray-600 mt-1">
+                    Here&apos;s what&apos;s happening with your business today
+                  </p>
+          {statsError && (
+            <p className="text-sm text-amber-600 mt-2">
+              ⚠️ Using cached data - some information may be outdated
+            </p>
+          )}
+        </div>
+        <div className="flex space-x-3">
+          <Button variant="outline" size="sm" onClick={handleRefresh}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
+          <Link href="/seller/analytics">
+            <Button variant="outline" size="sm">
+              <BarChart3 className="w-4 h-4 mr-2" />
+              View Analytics
+            </Button>
+          </Link>
+          <Link href="/seller/upload">
+            <Button size="sm">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Product
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-        <Card className="p-6">
-          <div className="text-2xl font-bold text-orange-600">
-            {stats.totalProducts}
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <Card className="p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-2xl font-bold text-orange-600">
+                {dashboardData.totalProducts}
+              </div>
+              <div className="text-sm text-gray-600">Total Products</div>
+            </div>
+            <Package className="w-8 h-8 text-orange-500" />
           </div>
-          <div className="text-sm text-gray-600">Total Products</div>
         </Card>
-        <Card className="p-6">
-          <div className="text-2xl font-bold text-green-600">
-            {stats.totalOrders}
+        
+        <Card className="p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-2xl font-bold text-green-600">
+                {dashboardData.totalOrders}
+              </div>
+              <div className="text-sm text-gray-600">Total Orders</div>
+            </div>
+            <ShoppingCart className="w-8 h-8 text-green-500" />
           </div>
-          <div className="text-sm text-gray-600">Total Orders</div>
         </Card>
-        <Card className="p-6">
-          <div className="text-2xl font-bold text-blue-600">
-            {formatPrice(stats.totalRevenue)}
+        
+        <Card className="p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-2xl font-bold text-blue-600">
+                {formatPrice(dashboardData.totalRevenue)}
+              </div>
+              <div className="text-sm text-gray-600">Total Revenue</div>
+            </div>
+            <CreditCard className="w-8 h-8 text-blue-500" />
           </div>
-          <div className="text-sm text-gray-600">Total Revenue</div>
         </Card>
-        <Card className="p-6">
-          <div className="text-2xl font-bold text-yellow-600">
-            {stats.pendingOrders}
+        
+        <Card className="p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-2xl font-bold text-yellow-600">
+                {dashboardData.pendingOrders}
+              </div>
+              <div className="text-sm text-gray-600">Pending Orders</div>
+            </div>
+            <TrendingUp className="w-8 h-8 text-yellow-500" />
           </div>
-          <div className="text-sm text-gray-600">Pending Orders</div>
         </Card>
-        <Card className="p-6">
-          <div className="text-2xl font-bold text-purple-600">
-            ⭐ {stats.avgRating || 0}
+        
+        <Card className="p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-2xl font-bold text-purple-600">
+                ⭐ {dashboardData.avgRating || 0}
+              </div>
+              <div className="text-sm text-gray-600">Avg Rating</div>
+            </div>
+            <Users className="w-8 h-8 text-purple-500" />
           </div>
-          <div className="text-sm text-gray-600">Avg Rating</div>
         </Card>
-        <Card className="p-6">
-          <div className="text-2xl font-bold text-indigo-600">
-            {stats.viewsThisMonth || 0}
+        
+        <Card className="p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-2xl font-bold text-indigo-600">
+                {dashboardData.viewsThisMonth || 0}
+              </div>
+              <div className="text-sm text-gray-600">Views This Month</div>
+            </div>
+            <Eye className="w-8 h-8 text-indigo-500" />
           </div>
-          <div className="text-sm text-gray-600">Views This Month</div>
         </Card>
+      </div>
+
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column - Recent Orders */}
+        <div className="lg:col-span-2">
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">Recent Orders</h2>
+              <Link href="/seller/orders">
+                <Button variant="outline" size="sm">View All</Button>
+              </Link>
+            </div>
+            {ordersLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="animate-pulse">
+                    <div className="h-16 bg-gray-200 rounded"></div>
+                  </div>
+                ))}
+              </div>
+            ) : recentOrdersList.length > 0 ? (
+              <div className="space-y-3">
+                {recentOrdersList.map((order) => (
+                  <div key={order.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="font-medium text-gray-900">{order.customerName}</p>
+                      <p className="text-sm text-gray-600">{order.productTitle}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-gray-900">{formatPrice(order.totalAmount)}</p>
+                      <span className={`text-xs px-2 py-1 rounded ${
+                        order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                        order.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                        order.status === 'shipped' ? 'bg-purple-100 text-purple-800' :
+                        order.status === 'delivered' ? 'bg-green-100 text-green-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {order.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <ShoppingCart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">No recent orders</p>
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* Right Column - AI Widgets */}
+        <div className="space-y-6">
+          {/* AI Insights Widget */}
+          <AIInsightsWidget data={dashboardData} />
+          
+          {/* Notification Widget */}
+          <NotificationWidget context={dashboardData} />
+          
+                  {/* AI Assistant Widget */}
+                  <AIAssistant context={dashboardData} />
+        </div>
       </div>
 
       {/* Quick Actions */}
-      <div className="grid md:grid-cols-2 gap-8 mb-8">
-        <Card className="p-6">
-          <h2 className="text-xl font-bold mb-4">Quick Actions</h2>
-          <div className="space-y-3">
-            <Link href="/seller/upload" className="block">
-              <Button className="w-full justify-start">
-                <span className="mr-2">📸</span>
-                Upload New Product
-              </Button>
-            </Link>
-            <Link href="/seller/products" className="block">
-              <Button variant="outline" className="w-full justify-start">
-                <span className="mr-2">📦</span>
-                Manage Products
-              </Button>
-            </Link>
-            <Link href="/seller/payments" className="block">
-              <Button variant="outline" className="w-full justify-start">
-                <span className="mr-2">💰</span>
-                View Payments
-              </Button>
-            </Link>
-            <Button variant="outline" className="w-full justify-start">
-              <span className="mr-2">📊</span>
-              Download Reports
+      <Card className="p-6">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Link href="/seller/upload">
+            <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center">
+              <Plus className="w-6 h-6 mb-2" />
+              Add Product
             </Button>
-          </div>
-        </Card>
-
-        {/* Recent Orders */}
-        <Card className="p-6">
-          <h2 className="text-xl font-bold mb-4">Recent Orders</h2>
-
-          {/* Pending Orders */}
-          <h3 className="font-semibold mb-2 text-yellow-700">⏳ Pending</h3>
-          <div className="space-y-3 mb-4">
-            {stats.recentOrders?.pending?.length > 0 ? (
-              stats.recentOrders.pending.map((order: any) => (
-                <div key={order.orderId} className="border-b pb-3 last:border-0">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="font-medium">{order.products?.[0]?.productTitle}</div>
-                      <div className="text-sm text-gray-600">by {order.buyerName}</div>
-                      <div className="text-xs text-gray-500">
-                        {new Date(order.createdAt).toLocaleDateString()}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold">{formatPrice(order.amount)}</div>
-                      <div className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
-                        Pending
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-gray-500 text-sm">No pending orders</p>
-            )}
-          </div>
-
-          {/* Confirmed Orders */}
-          <h3 className="font-semibold mb-2 text-green-700">✅ Confirmed</h3>
-          <div className="space-y-3">
-            {stats.recentOrders?.confirmed?.length > 0 ? (
-              stats.recentOrders.confirmed.map((order: any) => (
-                <div key={order.orderId} className="border-b pb-3 last:border-0">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="font-medium">{order.products?.[0]?.productTitle}</div>
-                      <div className="text-sm text-gray-600">by {order.buyerName}</div>
-                      <div className="text-xs text-gray-500">
-                        {new Date(order.createdAt).toLocaleDateString()}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-2">
-                        Ship to: {order.shippingAddress?.address}, {order.shippingAddress?.city},{' '}
-                        {order.shippingAddress?.state} - {order.shippingAddress?.pincode}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        Contact: {order.buyerContact}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold">{formatPrice(order.amount)}</div>
-                      <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                        Confirmed
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-gray-500 text-sm">No confirmed orders</p>
-            )}
-          </div>
-        </Card>
-      </div>
-
-      {/* Tips Section */}
-      <Card className="p-6 bg-gradient-to-r from-orange-50 to-amber-50">
-        <h2 className="text-xl font-bold mb-4">💡 Tips to Increase Sales</h2>
-        <div className="grid md:grid-cols-3 gap-4">
-          <div>
-            <h3 className="font-semibold mb-2">📸 Better Photos</h3>
-            <p className="text-sm text-gray-600">
-              Upload clear photos with good lighting. Our AI will enhance them further!
-            </p>
-          </div>
-          <div>
-            <h3 className="font-semibold mb-2">📝 Tell Your Story</h3>
-            <p className="text-sm text-gray-600">
-              Share the heritage and craftsmanship behind your products. Buyers love authenticity!
-            </p>
-          </div>
-          <div>
-            <h3 className="font-semibold mb-2">🎯 Fair Pricing</h3>
-            <p className="text-sm text-gray-600">
-              Use our AI price suggestions to find the sweet spot between value and profit.
-            </p>
-          </div>
+          </Link>
+          <Link href="/seller/orders">
+            <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center">
+              <ShoppingCart className="w-6 h-6 mb-2" />
+              Manage Orders
+            </Button>
+          </Link>
+          <Link href="/seller/analytics">
+            <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center">
+              <BarChart3 className="w-6 h-6 mb-2" />
+              View Analytics
+            </Button>
+          </Link>
+          <Link href="/seller/settings">
+            <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center">
+              <Users className="w-6 h-6 mb-2" />
+              Settings
+            </Button>
+          </Link>
         </div>
       </Card>
+
+      {/* AI Assistant */}
+      <AIAssistant context={dashboardData} />
     </div>
   )
 }

@@ -2,6 +2,12 @@ const CACHE_NAME = 'artisan-cache-v1';
 const DATA_CACHE_NAME = 'artisan-data-v1';
 const OFFLINE_URL = '/offline.html';
 
+// Dynamic configuration - will be updated via postMessage
+let CONFIG = {
+  apiBaseUrl: 'http://localhost:4000', // Default fallback
+  environment: 'development'
+};
+
 const STATIC_ASSETS = [
   '/',
   '/offline.html',
@@ -9,16 +15,63 @@ const STATIC_ASSETS = [
   '/manifest.json',
   '/images/fallback.svg',
   '/images/blur-placeholder.png',
-  '/images/icon-192x192.png',
-  '/images/icon-512x512.png'
+  '/images/apple-touch-icon.png',
+  '/images/fallback.png'
 ];
 
-const API_CACHE_PATTERNS = [
-  '/api/buyer/products',
-  '/api/buyer/categories',
-  '/api/buyer/featured',
-  '/api/ai/recommendations'
-];
+// API endpoint definitions
+const API_ENDPOINTS = {
+  buyer: {
+    products: '/buyer/products',
+    categories: '/buyer/categories',
+    featured: '/buyer/featured',
+    cart: '/buyer/cart'
+  },
+  seller: {
+    dashboard: '/seller/dashboard',
+    products: '/seller/products',
+    orders: '/seller/orders',
+    analytics: '/seller/analytics',
+    payments: '/seller/payments'
+  },
+  ai: {
+    recommendations: '/ai/recommendations',
+    chat: '/ai/chat',
+    transcribe: '/ai/transcribe'
+  }
+};
+
+// Dynamic URL builder
+function buildApiUrl(endpoint) {
+  return `${CONFIG.apiBaseUrl}${endpoint}`;
+}
+
+// Get buyer API cache patterns (public data for prefetching)
+function getBuyerCachePatterns() {
+  return [
+    buildApiUrl(API_ENDPOINTS.buyer.products),
+    buildApiUrl(API_ENDPOINTS.buyer.categories),
+    buildApiUrl(API_ENDPOINTS.buyer.featured),
+    buildApiUrl(API_ENDPOINTS.ai.recommendations)
+  ];
+}
+
+// Get prefetch URLs for installation
+function getPrefetchUrls() {
+  return [
+    buildApiUrl(API_ENDPOINTS.buyer.products) + '?page=1&limit=12',
+    buildApiUrl(API_ENDPOINTS.buyer.categories),
+    buildApiUrl(API_ENDPOINTS.buyer.featured)
+  ];
+}
+
+// Configuration message handler
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'CONFIG_UPDATE') {
+    CONFIG = { ...CONFIG, ...event.data.config };
+    console.log('Service Worker: Configuration updated', CONFIG);
+  }
+});
 
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
@@ -31,14 +84,13 @@ self.addEventListener('install', (event) => {
         console.log('Service Worker: Caching static assets');
         return cache.addAll(STATIC_ASSETS);
       }),
-      // Prefetch key API data
+      // Prefetch key API data using dynamic URLs
       caches.open(DATA_CACHE_NAME).then((cache) => {
         console.log('Service Worker: Prefetching API data');
-        return Promise.all([
-          cache.add('/api/buyer/products?page=1&limit=12'),
-          cache.add('/api/buyer/categories'),
-          cache.add('/api/buyer/featured')
-        ]).catch(err => {
+        const prefetchUrls = getPrefetchUrls();
+        return Promise.all(
+          prefetchUrls.map(url => cache.add(url))
+        ).catch(err => {
           console.log('Service Worker: Some API prefetch failed:', err);
         });
       })
@@ -75,44 +127,22 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
   
-  // Handle API requests
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      caches.open(DATA_CACHE_NAME).then((cache) => {
-        return cache.match(request).then((cachedResponse) => {
-          if (cachedResponse) {
-            console.log('Service Worker: Serving API from cache:', url.pathname);
-            return cachedResponse;
-          }
-          
-          return fetch(request).then((response) => {
-            // Cache successful responses
-            if (response.status === 200) {
-              const responseClone = response.clone();
-              cache.put(request, responseClone);
-            }
-            return response;
-          }).catch(() => {
-            // Return cached data if available, even if stale
-            return cachedResponse || new Response(
-              JSON.stringify({ error: 'Offline - no cached data available' }),
-              { 
-                status: 503,
-                headers: { 'Content-Type': 'application/json' }
-              }
-            );
-          });
-        });
-      })
-    );
+  // Handle API requests to our backend
+  if (url.origin === CONFIG.apiBaseUrl) {
+    event.respondWith(handleApiRequest(request));
     return;
   }
   
   // Handle static assets
-  event.respondWith(
-    caches.match(request).then((cachedResponse) => {
+  event.respondWith(handleStaticRequest(request));
+});
+
+// Handle API requests with caching
+function handleApiRequest(request) {
+  return caches.open(DATA_CACHE_NAME).then((cache) => {
+    return cache.match(request).then((cachedResponse) => {
       if (cachedResponse) {
-        console.log('Service Worker: Serving from cache:', url.pathname);
+        console.log('Service Worker: Serving API from cache:', request.url);
         return cachedResponse;
       }
       
@@ -120,23 +150,51 @@ self.addEventListener('fetch', (event) => {
         // Cache successful responses
         if (response.status === 200) {
           const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseClone);
-          });
+          cache.put(request, responseClone);
         }
         return response;
       }).catch(() => {
-        // Serve offline page for navigation requests
-        if (request.mode === 'navigate') {
-          return caches.match(OFFLINE_URL);
-        }
-        
-        // Return fallback for other requests
-        return new Response('Offline', { status: 503 });
+        // Return cached data if available, even if stale
+        return cachedResponse || new Response(
+          JSON.stringify({ error: 'Offline - no cached data available' }),
+          { 
+            status: 503,
+            headers: { 'Content-Type': 'application/json' }
+          }
+        );
       });
-    })
-  );
-});
+    });
+  });
+}
+
+// Handle static asset requests
+function handleStaticRequest(request) {
+  return caches.match(request).then((cachedResponse) => {
+    if (cachedResponse) {
+      console.log('Service Worker: Serving from cache:', request.url);
+      return cachedResponse;
+    }
+    
+    return fetch(request).then((response) => {
+      // Cache successful responses
+      if (response.status === 200) {
+        const responseClone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(request, responseClone);
+        });
+      }
+      return response;
+    }).catch(() => {
+      // Serve offline page for navigation requests
+      if (request.mode === 'navigate') {
+        return caches.match(OFFLINE_URL);
+      }
+      
+      // Return fallback for other requests
+      return new Response('Offline', { status: 503 });
+    });
+  });
+}
 
 // Background sync for cart actions
 self.addEventListener('sync', (event) => {
@@ -154,20 +212,20 @@ self.addEventListener('push', (event) => {
   const data = event.data ? event.data.json() : {
     title: 'Artisan Economy',
     message: 'You have a new update!',
-    icon: '/images/icon-192x192.png'
+    icon: '/images/apple-touch-icon.png'
   };
   
   const options = {
     body: data.message,
-    icon: data.icon || '/images/icon-192x192.png',
-    badge: '/images/icon-192x192.png',
+    icon: data.icon || '/images/apple-touch-icon.png',
+    badge: '/images/apple-touch-icon.png',
     vibrate: [200, 100, 200],
     data: data.data || {},
     actions: [
       {
         action: 'view',
         title: 'View',
-        icon: '/images/icon-192x192.png'
+        icon: '/images/apple-touch-icon.png'
       },
       {
         action: 'dismiss',
@@ -218,7 +276,7 @@ async function syncCartActions() {
     // Process each action
     for (const action of queue) {
       try {
-        await fetch(`/api/buyer/cart${action.endpoint}`, {
+        await fetch(`${CONFIG.apiBaseUrl}/buyer/cart${action.endpoint}`, {
           method: action.method,
           headers: {
             'Content-Type': 'application/json',

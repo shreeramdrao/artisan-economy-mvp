@@ -100,35 +100,56 @@ const nextConfig = {
     
     // Log CSP mode
     if (isDev) {
-      console.log('⚠️ Running in DEV mode: relaxed CSP enabled');
+      console.log('⚠️ Running in DEV mode: CSP disabled for development');
     } else {
       console.log('🔒 Running in PRODUCTION mode: strict CSP enforced');
     }
 
-    // Environment-specific CSP rules
-    const cspPolicy = isDev
-      ? // Development CSP - relaxed for Next.js dev mode, HMR, and React Fast Refresh
-        "default-src 'self' data: blob:; " +
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; " +
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-        "img-src 'self' data: blob: http://localhost:* https://localhost:* https://via.placeholder.com https://images.unsplash.com https://res.cloudinary.com https://lh3.googleusercontent.com https://storage.googleapis.com; " +
-        "font-src 'self' data: https://fonts.googleapis.com https://fonts.gstatic.com; " +
-        "connect-src 'self' http://localhost:* ws://localhost:* https://localhost:* wss://localhost:* https: wss: *.ngrok.io *.ngrok-free.app; " +
-        "frame-src 'none'; " +
-        "object-src 'none'; " +
-        "base-uri 'self'; " +
-        "form-action 'self';"
-      : // Production CSP - strict security with required domains
-        "default-src 'self' data: blob: https://fonts.googleapis.com https://fonts.gstatic.com; " +
-        "script-src 'self'; " +
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-        "img-src 'self' data: blob: https://via.placeholder.com https://images.unsplash.com https://res.cloudinary.com https://lh3.googleusercontent.com https://storage.googleapis.com; " +
-        "font-src 'self' data: https://fonts.googleapis.com https://fonts.gstatic.com; " +
-        "connect-src 'self' https: wss:; " +
-        "frame-src 'none'; " +
-        "object-src 'none'; " +
-        "base-uri 'self'; " +
-        "form-action 'self';";
+    // In development mode, disable CSP entirely to avoid blocking issues
+    if (isDev) {
+      return [
+        {
+          source: '/(.*)',
+          headers: [
+            // Only keep essential security headers in development
+            { key: 'X-Frame-Options', value: 'DENY' },
+            { key: 'X-Content-Type-Options', value: 'nosniff' },
+            { key: 'Referrer-Policy', value: 'origin-when-cross-origin' },
+          ],
+        },
+        {
+          source: '/images/(.*)',
+          headers: [
+            {
+              key: 'Cache-Control',
+              value: 'public, max-age=31536000, immutable',
+            },
+          ],
+        },
+        {
+          source: '/_next/static/(.*)',
+          headers: [
+            {
+              key: 'Cache-Control',
+              value: 'public, max-age=31536000, immutable',
+            },
+          ],
+        },
+      ];
+    }
+
+    // Production CSP - strict security with required domains
+    const cspPolicy = 
+      "default-src 'self' data: blob: https://fonts.googleapis.com https://fonts.gstatic.com; " +
+      "script-src 'self'; " +
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+      "img-src 'self' data: blob: https://via.placeholder.com https://images.unsplash.com https://res.cloudinary.com https://lh3.googleusercontent.com https://storage.googleapis.com; " +
+      "font-src 'self' data: https://fonts.googleapis.com https://fonts.gstatic.com; " +
+      "connect-src 'self' https: wss:; " +
+      "frame-src 'none'; " +
+      "object-src 'none'; " +
+      "base-uri 'self'; " +
+      "form-action 'self';";
 
     return [
       {

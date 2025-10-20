@@ -52,6 +52,22 @@ const config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Seller Portal specific colors
+        seller: {
+          primary: "#f97316", // orange-500
+          secondary: "#f59e0b", // amber-500
+          accent: "#10b981", // emerald-500
+          success: "#059669", // emerald-600
+          warning: "#d97706", // amber-600
+          error: "#dc2626", // red-600
+          info: "#2563eb", // blue-600
+        },
+        status: {
+          success: "#059669",
+          warning: "#d97706", 
+          error: "#dc2626",
+          info: "#2563eb",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
