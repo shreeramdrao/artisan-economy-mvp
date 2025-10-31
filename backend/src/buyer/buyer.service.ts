@@ -978,4 +978,88 @@ export class BuyerService {
     this.logger.log(`Migrated ${guestItems.length} guest cart items for user: ${userId}`);
     return await this.getCart(userId);
   }
+
+  // ----------------- WISHLIST -----------------
+  async getWishlist(buyerId: string): Promise<string[]> {
+    try {
+      const decodedBuyerId = decodeURIComponent(buyerId);
+      const wishlist = await this.firestoreService.getDocument('wishlists', decodedBuyerId);
+      
+      // Return array of product IDs, or empty array if wishlist doesn't exist
+      if (wishlist && wishlist.productIds) {
+        return Array.isArray(wishlist.productIds) ? wishlist.productIds : [];
+      }
+      
+      return [];
+    } catch (error) {
+      this.logger.warn(`Failed to fetch wishlist from Firestore for ${buyerId}, returning empty array:`, error.message);
+      return [];
+    }
+  }
+
+  async updateWishlist(buyerId: string, productIds: string[]): Promise<{ success: boolean; message: string }> {
+    try {
+      const decodedBuyerId = decodeURIComponent(buyerId);
+      
+      // Validate product IDs are strings
+      const validProductIds = productIds.filter(id => typeof id === 'string' && id.trim().length > 0);
+      
+      await this.firestoreService.setDocument('wishlists', decodedBuyerId, {
+        buyerId: decodedBuyerId,
+        productIds: validProductIds,
+        updatedAt: new Date(),
+      });
+      
+      this.logger.log(`✅ Updated wishlist for ${decodedBuyerId} with ${validProductIds.length} products`);
+      return { success: true, message: 'Wishlist updated successfully' };
+    } catch (error) {
+      this.logger.error(`❌ Failed to update wishlist for ${buyerId}:`, error);
+      throw error;
+    }
+  }
+
+  async addToWishlist(buyerId: string, productId: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const decodedBuyerId = decodeURIComponent(buyerId);
+      const currentWishlist = await this.getWishlist(decodedBuyerId);
+      
+      // Check if product is already in wishlist
+      if (currentWishlist.includes(productId)) {
+        return { success: true, message: 'Product already in wishlist' };
+      }
+      
+      // Add product to wishlist
+      const updatedProductIds = [...currentWishlist, productId];
+      await this.updateWishlist(decodedBuyerId, updatedProductIds);
+      
+      this.logger.log(`✅ Added product ${productId} to wishlist for ${decodedBuyerId}`);
+      return { success: true, message: 'Product added to wishlist successfully' };
+    } catch (error) {
+      this.logger.error(`❌ Failed to add product to wishlist for ${buyerId}:`, error);
+      throw error;
+    }
+  }
+
+  async removeFromWishlist(buyerId: string, productId: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const decodedBuyerId = decodeURIComponent(buyerId);
+      const currentWishlist = await this.getWishlist(decodedBuyerId);
+      
+      // Remove product from wishlist
+      const updatedProductIds = currentWishlist.filter(id => id !== productId);
+      
+      // If nothing changed, product wasn't in wishlist
+      if (updatedProductIds.length === currentWishlist.length) {
+        return { success: true, message: 'Product not in wishlist' };
+      }
+      
+      await this.updateWishlist(decodedBuyerId, updatedProductIds);
+      
+      this.logger.log(`✅ Removed product ${productId} from wishlist for ${decodedBuyerId}`);
+      return { success: true, message: 'Product removed from wishlist successfully' };
+    } catch (error) {
+      this.logger.error(`❌ Failed to remove product from wishlist for ${buyerId}:`, error);
+      throw error;
+    }
+  }
 }

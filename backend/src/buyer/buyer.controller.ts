@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Delete,
   Patch,
   Param,
@@ -13,6 +14,7 @@ import {
   Res,
   UseGuards,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -34,6 +36,7 @@ import {
   CategoryResponse,
   FeaturedProductResponse,
 } from './dto/buyer-response.dto';
+import { AddToWishlistDto, UpdateWishlistDto } from './dto/wishlist.dto';
 import { Request, Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -41,7 +44,16 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 @ApiBearerAuth()
 @Controller('buyer')
 export class BuyerController {
-  constructor(private readonly buyerService: BuyerService) {}
+  private readonly logger = new Logger(BuyerController.name);
+
+  constructor(private readonly buyerService: BuyerService) {
+    // Log when routes are registered
+    this.logger.log('[BuyerController] Controller initialized');
+    this.logger.log('[BuyerController] GET /buyer/products route active');
+    this.logger.log('[BuyerController] GET /buyer/categories route active');
+    this.logger.log('[BuyerController] GET /buyer/featured route active');
+    this.logger.log('[BuyerController] GET /buyer/wishlist/:email route active');
+  }
 
   // ----------------- PRODUCTS -----------------
   @Get('products')
@@ -76,6 +88,7 @@ export class BuyerController {
   async getProducts(
     @Query() query: ProductQueryDto & PaginationDto,
   ): Promise<PaginatedResponseDto<ProductListResponse>> {
+    this.logger.log(`[BuyerController] GET /buyer/products called with query:`, JSON.stringify(query));
     return this.buyerService.getProducts(query);
   }
 
@@ -231,6 +244,7 @@ export class BuyerController {
     },
   })
   async getCategories(): Promise<CategoryResponse[]> {
+    this.logger.log('[BuyerController] GET /buyer/categories called');
     return this.buyerService.getCategories();
   }
 
@@ -257,6 +271,7 @@ export class BuyerController {
     },
   })
   async getFeaturedProducts(): Promise<FeaturedProductResponse[]> {
+    this.logger.log('[BuyerController] GET /buyer/featured called');
     return this.buyerService.getFeaturedProducts();
   }
 
@@ -395,5 +410,112 @@ export class BuyerController {
     const user = req.user as any;
     if (!user?.email) throw new BadRequestException('Not authenticated');
     return this.buyerService.removeFromCart(user.email, productId);
+  }
+
+  // ----------------- WISHLIST -----------------
+  @Get('wishlist/:email')
+  @ApiOperation({ summary: 'Get wishlist for a buyer by email' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of product IDs in the wishlist',
+    schema: {
+      type: 'array',
+      items: { type: 'string' },
+      example: ['product-123', 'product-456'],
+    },
+  })
+  async getWishlist(@Param('email') email: string): Promise<string[]> {
+    return this.buyerService.getWishlist(email);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put('wishlist/:email')
+  @ApiOperation({ summary: 'Update entire wishlist for a buyer' })
+  @ApiResponse({
+    status: 200,
+    description: 'Wishlist updated successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        message: { type: 'string', example: 'Wishlist updated successfully' },
+      },
+    },
+  })
+  async updateWishlist(
+    @Param('email') email: string,
+    @Body() updateDto: UpdateWishlistDto,
+    @Req() req: Request,
+  ) {
+    const user = req.user as any;
+    const decodedEmail = decodeURIComponent(email);
+    
+    // Security: Only allow users to update their own wishlist
+    if (user?.email && decodedEmail !== user.email) {
+      throw new BadRequestException('Access denied: Can only update your own wishlist');
+    }
+    
+    return this.buyerService.updateWishlist(decodedEmail, updateDto.productIds);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('wishlist/:email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Add a product to wishlist' })
+  @ApiResponse({
+    status: 200,
+    description: 'Product added to wishlist successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        message: { type: 'string', example: 'Product added to wishlist successfully' },
+      },
+    },
+  })
+  async addToWishlist(
+    @Param('email') email: string,
+    @Body() addDto: AddToWishlistDto,
+    @Req() req: Request,
+  ) {
+    const user = req.user as any;
+    const decodedEmail = decodeURIComponent(email);
+    
+    // Security: Only allow users to add to their own wishlist
+    if (user?.email && decodedEmail !== user.email) {
+      throw new BadRequestException('Access denied: Can only add to your own wishlist');
+    }
+    
+    return this.buyerService.addToWishlist(decodedEmail, addDto.productId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('wishlist/:email/:productId')
+  @ApiOperation({ summary: 'Remove a product from wishlist' })
+  @ApiResponse({
+    status: 200,
+    description: 'Product removed from wishlist successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        message: { type: 'string', example: 'Product removed from wishlist successfully' },
+      },
+    },
+  })
+  async removeFromWishlist(
+    @Param('email') email: string,
+    @Param('productId') productId: string,
+    @Req() req: Request,
+  ) {
+    const user = req.user as any;
+    const decodedEmail = decodeURIComponent(email);
+    
+    // Security: Only allow users to remove from their own wishlist
+    if (user?.email && decodedEmail !== user.email) {
+      throw new BadRequestException('Access denied: Can only remove from your own wishlist');
+    }
+    
+    return this.buyerService.removeFromWishlist(decodedEmail, productId);
   }
 }
