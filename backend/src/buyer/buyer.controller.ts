@@ -31,6 +31,8 @@ import {
   ProductDetailResponse,
   CheckoutResponse,
   OrderResponse,
+  CategoryResponse,
+  FeaturedProductResponse,
 } from './dto/buyer-response.dto';
 import { Request, Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -212,14 +214,49 @@ export class BuyerController {
 
   // ----------------- EXTRA FEATURES -----------------
   @Get('categories')
-  @ApiOperation({ summary: 'Get all product categories' })
-  async getCategories() {
+  @ApiOperation({ 
+    summary: 'Get all product categories',
+    description: 'Returns a list of all product categories with product counts. Falls back to mock data if Firestore is unavailable.'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of categories',
+    type: [CategoryResponse],
+    schema: {
+      example: [
+        { id: 'pottery', name: 'Pottery', count: 45 },
+        { id: 'textiles', name: 'Textiles', count: 128 },
+        { id: 'jewelry', name: 'Jewelry', count: 89 },
+      ],
+    },
+  })
+  async getCategories(): Promise<CategoryResponse[]> {
     return this.buyerService.getCategories();
   }
 
   @Get('featured')
-  @ApiOperation({ summary: 'Get featured products' })
-  async getFeaturedProducts() {
+  @ApiOperation({ 
+    summary: 'Get featured products',
+    description: 'Returns up to 8 featured products sorted by views. Falls back to mock data if Firestore is unavailable.'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of featured products',
+    type: [FeaturedProductResponse],
+    schema: {
+      example: [
+        {
+          productId: 'featured-1',
+          title: 'Handwoven Silk Shawl',
+          price: 1299,
+          imageUrl: '/images/fallback.svg',
+          sellerName: 'Rajasthani Artisan',
+          category: 'textiles',
+        },
+      ],
+    },
+  })
+  async getFeaturedProducts(): Promise<FeaturedProductResponse[]> {
     return this.buyerService.getFeaturedProducts();
   }
 

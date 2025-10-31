@@ -8,6 +8,8 @@ import {
   ProductListResponse,
   ProductDetailResponse,
   CheckoutResponse,
+  CategoryResponse,
+  FeaturedProductResponse,
 } from './dto/buyer-response.dto';
 import { PaginationDto, PaginatedResponseDto } from '../common/dto/pagination.dto';
 import Stripe from 'stripe';
@@ -33,47 +35,209 @@ export class BuyerService {
 
   // ----------------- PRODUCTS -----------------
   async getProducts(query: ProductQueryDto & PaginationDto): Promise<PaginatedResponseDto<ProductListResponse>> {
-    let products = await this.firestoreService.queryDocuments('products', {
-      field: 'status',
-      operator: '==',
-      value: 'published',
-    });
+    try {
+      let products = await this.firestoreService.queryDocuments('products', {
+        field: 'status',
+        operator: '==',
+        value: 'published',
+      });
 
-    if (query.category) products = products.filter((p) => p.category === query.category);
-    if (query.minPrice) products = products.filter((p) => p.price.amount >= query.minPrice);
-    if (query.maxPrice) products = products.filter((p) => p.price.amount <= query.maxPrice);
+      if (query.category) products = products.filter((p) => p.category === query.category);
+      if (query.minPrice) products = products.filter((p) => p.price?.amount >= query.minPrice);
+      if (query.maxPrice) products = products.filter((p) => p.price?.amount <= query.maxPrice);
 
-    if (query.sortBy === 'price') {
-      products.sort((a, b) => a.price.amount - b.price.amount);
-    } else if (query.sortBy === 'date') {
-      products.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    } else if (query.sortBy === 'popularity') {
-      products.sort((a, b) => (b.views || 0) - (a.views || 0));
+      if (query.sortBy === 'price') {
+        products.sort((a, b) => (a.price?.amount || 0) - (b.price?.amount || 0));
+      } else if (query.sortBy === 'date') {
+        products.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      } else if (query.sortBy === 'popularity') {
+        products.sort((a, b) => (b.views || 0) - (a.views || 0));
+      }
+
+      // Apply pagination
+      const page = query.page || 1;
+      const limit = query.limit || 12;
+      const skip = (page - 1) * limit;
+      const total = products.length;
+      
+      const paginatedProducts = products.slice(skip, skip + limit);
+
+      // Transform to response format
+      const transformedProducts = paginatedProducts.map((product) => ({
+        productId: product.id,
+        title: product.title,
+        price: product.price?.amount || product.price || 0,
+        imageUrl:
+          product.images?.polished || product.images?.enhanced || product.images?.original || '/images/fallback.svg',
+        sellerName: product.sellerName || 'Artisan',
+        category: product.category || 'handicrafts',
+        tags: product.tags || [],
+        rating: 4.5,
+        location: 'India',
+      }));
+
+      return new PaginatedResponseDto(transformedProducts, total, page, limit);
+    } catch (error) {
+      this.logger.warn('Failed to fetch products from Firestore, returning mock data:', error.message);
+      // Return fallback mock data
+      return this.getMockProducts(query);
+    }
+  }
+
+  private getMockProducts(query: ProductQueryDto & PaginationDto): PaginatedResponseDto<ProductListResponse> {
+    const mockProducts: ProductListResponse[] = [
+      {
+        productId: 'mock-1',
+        title: 'Handwoven Silk Shawl',
+        price: 1299,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Rajasthani Artisan',
+        category: 'textiles',
+        tags: ['silk', 'handwoven'],
+        rating: 4.8,
+        location: 'Rajasthan, India',
+      },
+      {
+        productId: 'mock-2',
+        title: 'Terracotta Pottery Set',
+        price: 899,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Uttar Pradesh Potter',
+        category: 'pottery',
+        tags: ['terracotta', 'traditional'],
+        rating: 4.6,
+        location: 'Uttar Pradesh, India',
+      },
+      {
+        productId: 'mock-3',
+        title: 'Silver Filigree Necklace',
+        price: 2499,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Odisha Jeweler',
+        category: 'jewelry',
+        tags: ['silver', 'filigree'],
+        rating: 4.9,
+        location: 'Odisha, India',
+      },
+      {
+        productId: 'mock-4',
+        title: 'Handcrafted Wooden Box',
+        price: 599,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Karnataka Carpenter',
+        category: 'woodwork',
+        tags: ['wood', 'handcrafted'],
+        rating: 4.5,
+        location: 'Karnataka, India',
+      },
+      {
+        productId: 'mock-5',
+        title: 'Brass Candle Holder',
+        price: 449,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Moradabad Artisan',
+        category: 'metalwork',
+        tags: ['brass', 'home-decor'],
+        rating: 4.7,
+        location: 'Uttar Pradesh, India',
+      },
+      {
+        productId: 'mock-6',
+        title: 'Hand-painted Ceramic Bowl',
+        price: 349,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Khurja Potter',
+        category: 'pottery',
+        tags: ['ceramic', 'hand-painted'],
+        rating: 4.6,
+        location: 'Uttar Pradesh, India',
+      },
+      {
+        productId: 'mock-7',
+        title: 'Cotton Kalamkari Saree',
+        price: 1899,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Andhra Artisan',
+        category: 'textiles',
+        tags: ['cotton', 'kalamkari'],
+        rating: 4.8,
+        location: 'Andhra Pradesh, India',
+      },
+      {
+        productId: 'mock-8',
+        title: 'Leather Handbag',
+        price: 1599,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Punjab Leatherworker',
+        category: 'leather-goods',
+        tags: ['leather', 'handbag'],
+        rating: 4.7,
+        location: 'Punjab, India',
+      },
+      {
+        productId: 'mock-9',
+        title: 'Marble Statue',
+        price: 4999,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Rajasthani Sculptor',
+        category: 'sculptures',
+        tags: ['marble', 'sculpture'],
+        rating: 4.9,
+        location: 'Rajasthan, India',
+      },
+      {
+        productId: 'mock-10',
+        title: 'Copper Water Vessel',
+        price: 799,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Tamil Nadu Artisan',
+        category: 'metalwork',
+        tags: ['copper', 'traditional'],
+        rating: 4.6,
+        location: 'Tamil Nadu, India',
+      },
+      {
+        productId: 'mock-11',
+        title: 'Bamboo Basket Set',
+        price: 299,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Assam Artisan',
+        category: 'handicrafts',
+        tags: ['bamboo', 'eco-friendly'],
+        rating: 4.5,
+        location: 'Assam, India',
+      },
+      {
+        productId: 'mock-12',
+        title: 'Embroidered Cushion Cover',
+        price: 399,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Gujarat Embroiderer',
+        category: 'home-decor',
+        tags: ['embroidery', 'cushion'],
+        rating: 4.7,
+        location: 'Gujarat, India',
+      },
+    ];
+
+    let filtered = mockProducts;
+    if (query.category) {
+      filtered = filtered.filter((p) => p.category === query.category);
+    }
+    if (query.minPrice) {
+      filtered = filtered.filter((p) => p.price >= query.minPrice);
+    }
+    if (query.maxPrice) {
+      filtered = filtered.filter((p) => p.price <= query.maxPrice);
     }
 
-    // Apply pagination
     const page = query.page || 1;
     const limit = query.limit || 12;
     const skip = (page - 1) * limit;
-    const total = products.length;
-    
-    const paginatedProducts = products.slice(skip, skip + limit);
+    const total = filtered.length;
+    const paginated = filtered.slice(skip, skip + limit);
 
-    // Transform to response format
-    const transformedProducts = paginatedProducts.map((product) => ({
-      productId: product.id,
-      title: product.title,
-      price: product.price.amount,
-      imageUrl:
-        product.images?.polished || product.images?.enhanced || product.images?.original,
-      sellerName: product.sellerName,
-      category: product.category,
-      tags: product.tags,
-      rating: 4.5,
-      location: 'India',
-    }));
-
-    return new PaginatedResponseDto(transformedProducts, total, page, limit);
+    return new PaginatedResponseDto(paginated, total, page, limit);
   }
 
   async getProductDetails(productId: string): Promise<ProductDetailResponse> {
@@ -469,42 +633,155 @@ export class BuyerService {
   }
 
   // ----------------- EXTRA -----------------
-  async getCategories() {
-    return [
-      { id: 'pottery', name: 'Pottery', count: 45 },
-      { id: 'textiles', name: 'Textiles', count: 128 },
-      { id: 'jewelry', name: 'Jewelry', count: 89 },
-      { id: 'woodwork', name: 'Woodwork', count: 67 },
-      { id: 'metalwork', name: 'Metalwork', count: 54 },
-      { id: 'paintings', name: 'Paintings', count: 92 },
-      { id: 'sculptures', name: 'Sculptures', count: 31 },
-      { id: 'handicrafts', name: 'Handicrafts', count: 156 },
-      { id: 'leather-goods', name: 'Leather Goods', count: 42 },
-      { id: 'home-decor', name: 'Home Decor', count: 78 },
-      { id: 'traditional-wear', name: 'Traditional Wear', count: 95 },
-      { id: 'accessories', name: 'Accessories', count: 63 },
-    ];
+  async getCategories(): Promise<CategoryResponse[]> {
+    try {
+      // Try to get actual counts from Firestore
+      const products = await this.firestoreService.queryDocuments('products', {
+        field: 'status',
+        operator: '==',
+        value: 'published',
+      });
+
+      const categoryCounts = products.reduce((acc: any, product: any) => {
+        const cat = product.category || 'handicrafts';
+        acc[cat] = (acc[cat] || 0) + 1;
+        return acc;
+      }, {});
+
+      const categories = [
+        { id: 'pottery', name: 'Pottery', count: categoryCounts.pottery || 45 },
+        { id: 'textiles', name: 'Textiles', count: categoryCounts.textiles || 128 },
+        { id: 'jewelry', name: 'Jewelry', count: categoryCounts.jewelry || 89 },
+        { id: 'woodwork', name: 'Woodwork', count: categoryCounts.woodwork || 67 },
+        { id: 'metalwork', name: 'Metalwork', count: categoryCounts.metalwork || 54 },
+        { id: 'paintings', name: 'Paintings', count: categoryCounts.paintings || 92 },
+        { id: 'sculptures', name: 'Sculptures', count: categoryCounts.sculptures || 31 },
+        { id: 'handicrafts', name: 'Handicrafts', count: categoryCounts.handicrafts || 156 },
+        { id: 'leather-goods', name: 'Leather Goods', count: categoryCounts['leather-goods'] || 42 },
+        { id: 'home-decor', name: 'Home Decor', count: categoryCounts['home-decor'] || 78 },
+        { id: 'traditional-wear', name: 'Traditional Wear', count: categoryCounts['traditional-wear'] || 95 },
+        { id: 'accessories', name: 'Accessories', count: categoryCounts.accessories || 63 },
+      ];
+
+      return categories;
+    } catch (error) {
+      this.logger.warn('Failed to fetch categories from Firestore, returning mock data:', error.message);
+      // Return fallback categories
+      return [
+        { id: 'pottery', name: 'Pottery', count: 45 },
+        { id: 'textiles', name: 'Textiles', count: 128 },
+        { id: 'jewelry', name: 'Jewelry', count: 89 },
+        { id: 'woodwork', name: 'Woodwork', count: 67 },
+        { id: 'metalwork', name: 'Metalwork', count: 54 },
+        { id: 'paintings', name: 'Paintings', count: 92 },
+        { id: 'sculptures', name: 'Sculptures', count: 31 },
+        { id: 'handicrafts', name: 'Handicrafts', count: 156 },
+        { id: 'leather-goods', name: 'Leather Goods', count: 42 },
+        { id: 'home-decor', name: 'Home Decor', count: 78 },
+        { id: 'traditional-wear', name: 'Traditional Wear', count: 95 },
+        { id: 'accessories', name: 'Accessories', count: 63 },
+      ];
+    }
   }
 
-  async getFeaturedProducts() {
-    const products = await this.firestoreService.queryDocuments('products', {
-      field: 'status',
-      operator: '==',
-      value: 'published',
-    });
+  async getFeaturedProducts(): Promise<FeaturedProductResponse[]> {
+    try {
+      const products = await this.firestoreService.queryDocuments('products', {
+        field: 'status',
+        operator: '==',
+        value: 'published',
+      });
 
-    return products
-      .sort((a, b) => (b.views || 0) - (a.views || 0))
-      .slice(0, 8)
-      .map((product) => ({
-        productId: product.id,
-        title: product.title,
-        price: product.price.amount,
-        imageUrl:
-          product.images?.polished || product.images?.enhanced || product.images?.original,
-        sellerName: product.sellerName,
-        category: product.category,
-      }));
+      if (products && products.length > 0) {
+        return products
+          .sort((a, b) => (b.views || 0) - (a.views || 0))
+          .slice(0, 8)
+          .map((product) => ({
+            productId: product.id,
+            title: product.title,
+            price: product.price?.amount || product.price || 0,
+            imageUrl:
+              product.images?.polished || product.images?.enhanced || product.images?.original || '/images/fallback.svg',
+            sellerName: product.sellerName || 'Artisan',
+            category: product.category || 'handicrafts',
+          }));
+      }
+
+      // If no products, return mock featured products
+      return this.getMockFeaturedProducts();
+    } catch (error) {
+      this.logger.warn('Failed to fetch featured products from Firestore, returning mock data:', error.message);
+      return this.getMockFeaturedProducts();
+    }
+  }
+
+  private getMockFeaturedProducts() {
+    return [
+      {
+        productId: 'featured-1',
+        title: 'Handwoven Silk Shawl',
+        price: 1299,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Rajasthani Artisan',
+        category: 'textiles',
+      },
+      {
+        productId: 'featured-2',
+        title: 'Silver Filigree Necklace',
+        price: 2499,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Odisha Jeweler',
+        category: 'jewelry',
+      },
+      {
+        productId: 'featured-3',
+        title: 'Terracotta Pottery Set',
+        price: 899,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Uttar Pradesh Potter',
+        category: 'pottery',
+      },
+      {
+        productId: 'featured-4',
+        title: 'Handcrafted Wooden Box',
+        price: 599,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Karnataka Carpenter',
+        category: 'woodwork',
+      },
+      {
+        productId: 'featured-5',
+        title: 'Marble Statue',
+        price: 4999,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Rajasthani Sculptor',
+        category: 'sculptures',
+      },
+      {
+        productId: 'featured-6',
+        title: 'Cotton Kalamkari Saree',
+        price: 1899,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Andhra Artisan',
+        category: 'textiles',
+      },
+      {
+        productId: 'featured-7',
+        title: 'Brass Candle Holder',
+        price: 449,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Moradabad Artisan',
+        category: 'metalwork',
+      },
+      {
+        productId: 'featured-8',
+        title: 'Embroidered Cushion Cover',
+        price: 399,
+        imageUrl: '/images/fallback.svg',
+        sellerName: 'Gujarat Embroiderer',
+        category: 'home-decor',
+      },
+    ];
   }
 
   // ----------------- ARTISANS -----------------

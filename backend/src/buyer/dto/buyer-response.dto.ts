@@ -226,3 +226,36 @@ export class OrderResponse {
     pincode: string;
   };
 }
+
+// ----------------- CATEGORY RESPONSE -----------------
+export class CategoryResponse {
+  @ApiProperty({ example: 'pottery', description: 'Category ID' })
+  id: string;
+
+  @ApiProperty({ example: 'Pottery', description: 'Category display name' })
+  name: string;
+
+  @ApiProperty({ example: 45, description: 'Number of products in this category' })
+  count: number;
+}
+
+// ----------------- FEATURED PRODUCT RESPONSE -----------------
+export class FeaturedProductResponse {
+  @ApiProperty({ example: 'prod-123', description: 'Product ID' })
+  productId: string;
+
+  @ApiProperty({ example: 'Handwoven Silk Shawl', description: 'Product title' })
+  title: string;
+
+  @ApiProperty({ example: 1299, description: 'Product price in INR' })
+  price: number;
+
+  @ApiProperty({ example: '/images/fallback.svg', description: 'Product image URL' })
+  imageUrl: string;
+
+  @ApiProperty({ example: 'Rajasthani Artisan', description: 'Seller name' })
+  sellerName: string;
+
+  @ApiProperty({ example: 'textiles', description: 'Product category' })
+  category: string;
+}

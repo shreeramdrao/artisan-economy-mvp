@@ -10,6 +10,9 @@ const nextConfig = {
     optimizePackageImports: ['@radix-ui/react-icons', 'lucide-react'],
   },
 
+  // ✅ Ensure framer-motion is properly transpiled for App Router
+  transpilePackages: ['framer-motion'],
+
   // ✅ Image optimization (remote patterns + security)
   images: {
     domains: ['via.placeholder.com', 'res.cloudinary.com', 'images.unsplash.com', 'localhost'],
